@@ -1,0 +1,163 @@
+import React, { useRef, useEffect, useCallback } from 'react'
+import type { WaveformData, LoopState, HotCue } from '../types'
+
+interface WaveformDisplayProps {
+  waveformData: WaveformData | null
+  position: number
+  duration: number
+  loop?: LoopState
+  hotCues?: HotCue[]
+  onClick?: (percent: number) => void
+}
+
+const HOT_CUE_COLORS = ['#ff4444', '#ff8800', '#ffcc00', '#44ff44', '#44ccff', '#4488ff', '#aa44ff', '#ff44aa']
+
+export function WaveformDisplay({ waveformData, position, duration, loop, hotCues, onClick }: WaveformDisplayProps) {
+  const overviewRef = useRef<HTMLCanvasElement>(null)
+  const detailRef = useRef<HTMLCanvasElement>(null)
+  const animRef = useRef<number>(0)
+
+  const drawOverview = useCallback(() => {
+    const canvas = overviewRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const w = canvas.width; const h = canvas.height
+    ctx.clearRect(0, 0, w, h)
+
+    if (!waveformData || waveformData.peaks.length === 0) {
+      ctx.fillStyle = '#333'; ctx.font = '12px monospace'; ctx.fillText('No waveform', w / 2 - 30, h / 2 + 4)
+      return
+    }
+
+    const peaks = waveformData.peaks
+    const barWidth = Math.max(1, w / peaks.length)
+    for (let i = 0; i < peaks.length; i++) {
+      const x = (i / peaks.length) * w
+      const peakH = peaks[i] * h * 0.8
+      ctx.fillStyle = '#4a9eff'
+      ctx.fillRect(x, (h - peakH) / 2, barWidth, peakH)
+    }
+
+    // Loop overlay
+    if (loop?.active && loop.startSeconds !== null && loop.endSeconds !== null && duration > 0) {
+      const lsx = (loop.startSeconds / duration) * w
+      const lex = (loop.endSeconds / duration) * w
+      ctx.fillStyle = 'rgba(0, 255, 100, 0.15)'
+      ctx.fillRect(lsx, 0, lex - lsx, h)
+      ctx.strokeStyle = '#00ff64'; ctx.lineWidth = 2
+      ctx.beginPath(); ctx.moveTo(lsx, 0); ctx.lineTo(lsx, h); ctx.stroke()
+      ctx.beginPath(); ctx.moveTo(lex, 0); ctx.lineTo(lex, h); ctx.stroke()
+      ctx.fillStyle = '#00ff64'; ctx.font = '10px monospace'; ctx.fillText('LOOP', lsx + 2, 12)
+    }
+
+    // Hot cue markers
+    if (hotCues && duration > 0) {
+      for (const hc of hotCues) {
+        if (!hc.active) continue
+        const x = (hc.positionSeconds / duration) * w
+        ctx.strokeStyle = HOT_CUE_COLORS[hc.index % HOT_CUE_COLORS.length]
+        ctx.lineWidth = 2
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke()
+        ctx.fillStyle = HOT_CUE_COLORS[hc.index % HOT_CUE_COLORS.length]
+        ctx.font = 'bold 10px monospace'
+        ctx.fillText(`${hc.index + 1}`, x + 2, 12)
+      }
+    }
+
+    // Position indicator
+    if (duration > 0) {
+      const posX = (position / duration) * w
+      ctx.strokeStyle = '#ff4444'; ctx.lineWidth = 2
+      ctx.beginPath(); ctx.moveTo(posX, 0); ctx.lineTo(posX, h); ctx.stroke()
+    }
+  }, [waveformData, position, duration, loop, hotCues])
+
+  const drawDetail = useCallback(() => {
+    const canvas = detailRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const w = canvas.width; const h = canvas.height
+    ctx.clearRect(0, 0, w, h)
+
+    if (!waveformData || waveformData.peaks.length === 0 || duration <= 0) {
+      ctx.fillStyle = '#333'; ctx.font = '12px monospace'; ctx.fillText('No waveform data', w / 2 - 40, h / 2 + 4)
+      return
+    }
+
+    const peaks = waveformData.peaks
+    const pps = waveformData.pointsPerSecond
+    const viewportSeconds = 4
+    const startSec = Math.max(0, position - viewportSeconds / 2)
+    const endSec = Math.min(duration, position + viewportSeconds / 2)
+    const startIdx = Math.floor(startSec * pps)
+    const endIdx = Math.ceil(endSec * pps)
+    const visiblePeaks = peaks.slice(Math.max(0, startIdx), Math.min(peaks.length, endIdx))
+    if (visiblePeaks.length === 0) return
+    const barWidth = Math.max(1, w / visiblePeaks.length)
+    for (let i = 0; i < visiblePeaks.length; i++) {
+      const x = (i / visiblePeaks.length) * w
+      const peakH = visiblePeaks[i] * h * 0.8
+      ctx.fillStyle = '#4a9eff'
+      ctx.fillRect(x, (h - peakH) / 2, barWidth, peakH)
+    }
+
+    // Loop boundaries
+    if (loop?.active && loop.startSeconds !== null && loop.endSeconds !== null) {
+      if (loop.startSeconds >= startSec && loop.startSeconds <= endSec) {
+        const lx = ((loop.startSeconds - startSec) / (endSec - startSec)) * w
+        ctx.strokeStyle = '#00ff64'; ctx.lineWidth = 2
+        ctx.beginPath(); ctx.moveTo(lx, 0); ctx.lineTo(lx, h); ctx.stroke()
+      }
+      if (loop.endSeconds >= startSec && loop.endSeconds <= endSec) {
+        const lx = ((loop.endSeconds - startSec) / (endSec - startSec)) * w
+        ctx.strokeStyle = '#00ff64'; ctx.lineWidth = 2
+        ctx.beginPath(); ctx.moveTo(lx, 0); ctx.lineTo(lx, h); ctx.stroke()
+      }
+    }
+
+    // Hot cue markers in detail view
+    if (hotCues) {
+      for (const hc of hotCues) {
+        if (!hc.active) continue
+        if (hc.positionSeconds >= startSec && hc.positionSeconds <= endSec) {
+          const x = ((hc.positionSeconds - startSec) / (endSec - startSec)) * w
+          ctx.strokeStyle = HOT_CUE_COLORS[hc.index % HOT_CUE_COLORS.length]
+          ctx.lineWidth = 2
+          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke()
+        }
+      }
+    }
+
+    // Playhead
+    ctx.strokeStyle = '#ff4444'; ctx.lineWidth = 2
+    ctx.beginPath(); ctx.moveTo(w / 2, 0); ctx.lineTo(w / 2, h); ctx.stroke()
+    ctx.fillStyle = '#ff4444'
+    ctx.beginPath(); ctx.moveTo(w / 2 - 4, 0); ctx.lineTo(w / 2 + 4, 0); ctx.lineTo(w / 2, 6); ctx.closePath(); ctx.fill()
+  }, [waveformData, position, duration, loop, hotCues])
+
+  useEffect(() => {
+    const animate = () => { drawOverview(); drawDetail(); animRef.current = requestAnimationFrame(animate) }
+    animRef.current = requestAnimationFrame(animate)
+    return () => cancelAnimationFrame(animRef.current)
+  }, [drawOverview, drawDetail])
+
+  const handleOverviewClick = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!onClick || !overviewRef.current) return
+      const rect = overviewRef.current.getBoundingClientRect()
+      const x = e.clientX - rect.left
+      onClick(Math.max(0, Math.min(100, (x / rect.width) * 100)))
+    },
+    [onClick],
+  )
+
+  return (
+    <div className="waveform-container">
+      <canvas ref={overviewRef} width={600} height={60} className="waveform-overview"
+        onClick={handleOverviewClick} style={{ cursor: onClick ? 'pointer' : 'default' }} />
+      <canvas ref={detailRef} width={600} height={80} className="waveform-detail" />
+    </div>
+  )
+}
