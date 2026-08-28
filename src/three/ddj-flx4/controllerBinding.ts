@@ -23,9 +23,20 @@ export function bindControllerRuntime(root: THREE.Object3D): BoundController {
             case "linear":
             case "crossfader":
             case "jog":
-              c.object.rotation.y = c.kind === "jog" ? 0 : 0;
-              if (c.kind === "linear") c.object.position.z = c.defaultValue * (c.travelMax ?? 0);
-              else if (c.kind === "crossfader") c.object.position.x = c.defaultValue * (c.travelMax ?? 0);
+              if (c.kind === "rotary-bounded") {
+                const base = c.baseRotation ?? c.object.rotation;
+                c.object.rotation.copy(base);
+              } else if (c.kind === "jog") {
+                c.object.rotation.y = c.baseRotation?.y ?? 0;
+              } else {
+                const axis = c.axis ?? (c.kind === "crossfader" ? "x" : "z");
+                const base = c.basePosition?.[axis] ?? c.object.position[axis];
+                const min = c.travelMin ?? 0;
+                const max = c.travelMax ?? 0;
+                const value = typeof c.defaultValue === "number" ? c.defaultValue : 0;
+                const normalized = c.kind === "crossfader" ? (value + 1) / 2 : value;
+                c.object.position[axis] = base + min + (max - min) * normalized;
+              }
               break;
             default:
               break;

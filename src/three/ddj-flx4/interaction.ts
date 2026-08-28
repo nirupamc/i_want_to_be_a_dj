@@ -40,30 +40,55 @@ interface DragSession {
 const KNOB_PIXELS_PER_FULL_TURN = 250; // 1 full turn requires 250 px of vertical drag
 const FADER_PIXELS_PER_FULL_TRAVEL = 200;
 
+export function normalizePointerToNdc(
+  e: { clientX: number; clientY: number },
+  rect: { left: number; top: number; width: number; height: number }
+): THREE.Vector2 {
+  return new THREE.Vector2(
+    ((e.clientX - rect.left) / rect.width) * 2 - 1,
+    -((e.clientY - rect.top) / rect.height) * 2 + 1
+  );
+}
+
+function visibleWorldBounds(root: THREE.Object3D): THREE.Box3 {
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3();
+  root.traverse((object) => {
+    if ((object as THREE.Mesh).isMesh && !(object as THREE.Mesh).userData.__interactionHitbox) {
+      box.expandByObject(object);
+    }
+  });
+  return box;
+}
+
+function localBoundsFromWorldBounds(worldBox: THREE.Box3, parent: THREE.Object3D): THREE.Box3 {
+  parent.updateMatrixWorld(true);
+  const points: THREE.Vector3[] = [];
+  for (const x of [worldBox.min.x, worldBox.max.x]) {
+    for (const y of [worldBox.min.y, worldBox.max.y]) {
+      for (const z of [worldBox.min.z, worldBox.max.z]) {
+        points.push(parent.worldToLocal(new THREE.Vector3(x, y, z)));
+      }
+    }
+  }
+  return new THREE.Box3().setFromPoints(points);
+}
+
 function makeHitBox(control: RuntimeControl, sizeMultiplier = 2.2, _height = 0.012): THREE.Mesh | null {
   if (!(control.object as THREE.Mesh).isMesh && !firstDescendantBox(control.object)) {
     return null;
   }
-  // Compute bounding box in local space.
-  const box = new THREE.Box3();
-  control.object.updateWorldMatrix(true, false);
-  control.object.traverse((o) => {
-    if ((o as THREE.Mesh).isMesh) {
-      const m = o as THREE.Mesh;
-      m.geometry.computeBoundingBox();
-      const wb = new THREE.Box3().setFromObject(m);
-      wb.applyMatrix4(new THREE.Matrix4().copy(m.matrixWorld).invert().multiply(control.object.matrixWorld));
-      box.union(wb);
-    }
-  });
-  if (!isFinite(box.min.x)) return null;
+  control.object.updateMatrixWorld(true);
+  const visualWorldBox = visibleWorldBounds(control.object);
+  if (!isFinite(visualWorldBox.min.x)) return null;
+  const box = localBoundsFromWorldBounds(visualWorldBox, control.object);
   const size = new THREE.Vector3();
   box.getSize(size);
   const center = new THREE.Vector3();
   box.getCenter(center);
   const geo = new THREE.BoxGeometry(
     Math.max(size.x, 0.005) * sizeMultiplier,
-    Math.max(size.y, 0.005) * sizeMultiplier,
+    Math.max(size.y * sizeMultiplier, _height),
     Math.max(size.z, 0.005) * sizeMultiplier
   );
   const mat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
@@ -72,6 +97,8 @@ function makeHitBox(control: RuntimeControl, sizeMultiplier = 2.2, _height = 0.0
   mesh.userData.controlId = control.id;
   mesh.userData.controlKind = control.kind;
   mesh.userData.control = control;
+  mesh.userData.__interactionHitbox = true;
+  mesh.userData.visualWorldBox = visualWorldBox.clone();
   mesh.name = `${control.object.name ?? control.id}Hit`;
   return mesh;
 }
@@ -103,6 +130,7 @@ export class InteractionController {
   private readonly ndc = new THREE.Vector2();
   private drag: DragSession | null = null;
   private hoveredId: string | null = null;
+  private debugVisualization = false;
 
   constructor(opts: {
     dom: HTMLElement;
@@ -128,6 +156,7 @@ export class InteractionController {
 
   /** Attach invisible hit boxes for every interactive control. */
   attach(): void {
+    this.scene.updateMatrixWorld(true);
     for (const control of Object.values(this.controls)) {
       const hit = this.createHitTarget(control);
       if (!hit) continue;
@@ -135,6 +164,8 @@ export class InteractionController {
       // Add the hitbox as a child of the control pivot so transforms follow.
       control.object.add(hit);
     }
+    this.scene.updateMatrixWorld(true);
+    this.updateDebugMaterials();
     // Listen on the DOM element (canvas) — one centralized handler.
     this.dom.addEventListener("pointerdown", this.onPointerDown);
     this.dom.addEventListener("pointermove", this.onPointerMove);
@@ -157,6 +188,53 @@ export class InteractionController {
     this.dom.removeEventListener("contextmenu", this.onContextMenu);
   }
 
+  setDebugVisualization(enabled: boolean): void {
+    this.debugVisualization = enabled;
+    this.updateDebugMaterials();
+  }
+
+  setHoveredControl(id: string | null): void {
+    this.hoveredId = id;
+    this.updateDebugMaterials();
+  }
+
+  getRaycastTargets(): THREE.Mesh[] {
+    return [...this.hitByControl.values()];
+  }
+
+  getHitboxDiagnostics(): Array<{ id: string; hitboxUuid: string; targetName: string; parentName: string; visualWorldBox: THREE.Box3; hitboxWorldBox: THREE.Box3; overlapRatio: number }> {
+    this.scene.updateMatrixWorld(true);
+    return [...this.hitByControl.entries()].map(([id, hitbox]) => {
+      const visualWorldBox = (hitbox.userData.visualWorldBox as THREE.Box3).clone();
+      const hitboxWorldBox = new THREE.Box3().setFromObject(hitbox);
+      const visualSize = visualWorldBox.getSize(new THREE.Vector3());
+      const intersection = visualWorldBox.clone().intersect(hitboxWorldBox);
+      const intersectionSize = intersection.getSize(new THREE.Vector3());
+      const visualVolume = visualSize.x * visualSize.y * visualSize.z;
+      const intersectionVolume = intersectionSize.x * intersectionSize.y * intersectionSize.z;
+      return {
+      id,
+      hitboxUuid: hitbox.uuid,
+      targetName: this.controls[id].object.name,
+      parentName: hitbox.parent?.name ?? "",
+      visualWorldBox,
+      hitboxWorldBox,
+      overlapRatio: visualVolume > 0 ? intersectionVolume / visualVolume : 0
+      };
+    });
+  }
+
+  private updateDebugMaterials(): void {
+    for (const [id, hitbox] of this.hitByControl) {
+      const material = hitbox.material as THREE.MeshBasicMaterial;
+      material.depthTest = false;
+      material.wireframe = this.debugVisualization;
+      material.transparent = true;
+      material.opacity = this.debugVisualization ? (id === this.hoveredId ? 0.42 : 0.14) : 0;
+      material.color.set(id === this.hoveredId ? 0xffd166 : 0x38bdf8);
+    }
+  }
+
   /** Synthesise a hit test result for a particular control id (e.g. for tests). */
   hitTest(controlId: string): THREE.Intersection | null {
     const hit = this.hitByControl.get(controlId);
@@ -175,25 +253,28 @@ export class InteractionController {
     let sizeMultiplier = 1.8;
     let height = 0.012;
     if (control.kind === "pad" || control.kind === "button") {
-      sizeMultiplier = 1.6;
-      height = 0.006;
+      sizeMultiplier = control.kind === "pad" ? 1.1 : 1.25;
+      height = 0.02;
     } else if (control.kind === "jog") {
       // Use the entire pivot bounding sphere for a single disc hit.
       sizeMultiplier = 1.0;
       height = 0.012;
+    } else if (control.kind === "linear") {
+      // Keep vertical faders generous along travel while avoiding adjacent EQ knobs.
+      sizeMultiplier = 1.0;
     } else {
-      sizeMultiplier = 2.0;
+      sizeMultiplier = control.kind === "crossfader" ? 1.25 : 1.35;
     }
     return makeHitBox(control, sizeMultiplier, height);
   }
 
   private updateNDC(e: PointerEvent): void {
     const rect = this.dom.getBoundingClientRect();
-    this.ndc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    this.ndc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    this.ndc.copy(normalizePointerToNdc(e, rect));
   }
 
   private pick(): RuntimeControl | null {
+    this.scene.updateMatrixWorld(true);
     this.raycaster.setFromCamera(this.ndc, this.camera);
     const hits: THREE.Intersection[] = [];
     for (const hit of this.hitByControl.values()) hits.push(...this.raycaster.intersectObject(hit, false));
@@ -405,14 +486,17 @@ export class InteractionController {
 
   private readBoundedNormalized(control: RuntimeControl): number {
     const range = (3 * Math.PI) / 2;
-    return THREE.MathUtils.clamp((control.object.rotation.y + range / 2) / range, 0, 1);
+    const base = control.baseRotation?.y ?? 0;
+    return THREE.MathUtils.clamp((control.object.rotation.y - base + range / 2) / range, 0, 1);
   }
 
   private readLinearNormalized(control: RuntimeControl): number {
     const min = control.travelMin ?? 0;
     const max = control.travelMax ?? 0;
-    const cur = control.object.position[control.kind === "crossfader" ? "x" : "z"];
-    return THREE.MathUtils.clamp((cur - min) / (max - min), 0, 1);
+    const axis = control.axis ?? (control.kind === "crossfader" ? "x" : "z");
+    const cur = control.object.position[axis];
+    const base = control.basePosition?.[axis] ?? 0;
+    return THREE.MathUtils.clamp((cur - base - min) / (max - min), 0, 1);
   }
 
   private jogWorldCenter(control: RuntimeControl): THREE.Vector3 {

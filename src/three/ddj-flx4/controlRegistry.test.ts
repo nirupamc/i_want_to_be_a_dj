@@ -126,6 +126,21 @@ describe("M12A control registry", () => {
     }
   });
 
+  it("retains authored fader positions and rotary pivot rotations", () => {
+    const root = buildFakeModel();
+    const channelFader = root.getObjectByName("ChannelFader1")!;
+    const crossfader = root.getObjectByName("Crossfader")!;
+    const high = root.getObjectByName("High1Pivot")!;
+    channelFader.position.z = -0.069;
+    crossfader.position.x = 0.004;
+    high.rotation.set(0.1, 0.2, 0.3);
+
+    const { controls } = buildControlRegistry(root);
+    expect(controls["mixer.channel1.fader"].basePosition?.z).toBeCloseTo(-0.069);
+    expect(controls["mixer.crossfader"].basePosition?.x).toBeCloseTo(0.004);
+    expect(controls["mixer.channel1.eq.high"].baseRotation?.toArray()).toEqual([0.1, 0.2, 0.3, "XYZ"]);
+  });
+
   it("pads exactly cover indices 0..7 per deck", () => {
     const root = buildFakeModel();
     const { controls } = buildControlRegistry(root);

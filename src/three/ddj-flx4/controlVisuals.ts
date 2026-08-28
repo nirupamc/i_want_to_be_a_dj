@@ -53,7 +53,9 @@ export function applyControlValue(control: RuntimeControl, normalized: number): 
     case "rotary-bounded": {
       const t = THREE.MathUtils.clamp(normalized, 0, 1);
       const angle = ROTARY_RANGE * (t * 2 - 1);
-      control.object.rotation.y = angle;
+      const base = control.baseRotation ?? control.object.rotation;
+      control.object.rotation.copy(base);
+      control.object.rotation.y = base.y + angle;
       break;
     }
     case "rotary-relative": {
@@ -64,14 +66,18 @@ export function applyControlValue(control: RuntimeControl, normalized: number): 
       const t = THREE.MathUtils.clamp(normalized, 0, 1);
       const travel = (control.travelMax ?? 0) - (control.travelMin ?? 0);
       const offset = (control.travelMin ?? 0) + travel * t;
-      control.object.position.z = offset;
+      const axis = control.axis ?? "z";
+      const base = control.basePosition?.[axis] ?? control.object.position[axis];
+      control.object.position[axis] = base + offset;
       break;
     }
     case "crossfader": {
       const t = THREE.MathUtils.clamp(normalized, -1, 1);
       const travel = (control.travelMax ?? 0) - (control.travelMin ?? 0);
       const offset = (control.travelMin ?? 0) + (travel * (t + 1)) / 2;
-      control.object.position.x = offset;
+      const axis = control.axis ?? "x";
+      const base = control.basePosition?.[axis] ?? control.object.position[axis];
+      control.object.position[axis] = base + offset;
       break;
     }
     case "jog": {

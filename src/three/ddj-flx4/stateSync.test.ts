@@ -68,6 +68,12 @@ describe("M12B state sync", () => {
     expect(c.object.rotation.y).toBeCloseTo(0, 5);
   });
 
+  it("projects subscribed engine changes without a manual applyState call", () => {
+    engine.dispatch({ type: "SET_EQ_HIGH", deck: 0, db: 6 });
+    const c = controls["mixer.channel1.eq.high"];
+    expect(c.object.rotation.y).toBeGreaterThan(0);
+  });
+
   it("Tempo fader matches engine tempoRange", () => {
     engine.dispatch({ type: "CYCLE_TEMPO_RANGE", deck: 0 }); // 10 → 16
     engine.dispatch({ type: "SET_TEMPO", deck: 0, percent: 8 }); // 50% of 16 → normalized 0.75

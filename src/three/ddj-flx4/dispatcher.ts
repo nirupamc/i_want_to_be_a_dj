@@ -34,6 +34,10 @@ export class ThreeToEngineDispatcher {
 
   getState(): DJState { return this.engine.getState() }
 
+  subscribe(listener: (state: DJState) => void): () => void {
+    return this.engine.subscribe(listener)
+  }
+
   /** Apply a pointer down. */
   onDown(control: RuntimeControl): void {
     if (this._suppressEvents > 0) return

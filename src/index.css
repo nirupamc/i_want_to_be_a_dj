@@ -1281,3 +1281,441 @@ button {
 .three-debug-unbound .lbl { color: #ffb347; }
 .three-debug-unbound .unbound-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; opacity: 0.7; }
 
+/* M12B.1 Studio shell */
+body {
+  overflow: hidden;
+}
+
+.studio-app {
+  --studio-bg: #050607;
+  --studio-panel: #0d1014;
+  --studio-panel-2: #141821;
+  --studio-line: rgba(255, 255, 255, 0.08);
+  --studio-text: #f0f2f5;
+  --studio-muted: #8f96a3;
+  --studio-blue: #4a9eff;
+  --studio-pink: #ff4a9e;
+  --studio-green: #2be27a;
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-height: 100%;
+  height: 100%;
+  background:
+    radial-gradient(1200px 580px at 50% 100%, rgba(36, 42, 52, 0.42), transparent 66%),
+    var(--studio-bg);
+  color: var(--studio-text);
+}
+
+.studio-app.focus-mode {
+  grid-template-rows: auto 42px minmax(0, 1fr);
+}
+
+.track-display-bar {
+  display: grid;
+  grid-template-columns: minmax(180px, 280px) minmax(320px, 1fr) minmax(180px, 280px);
+  align-items: stretch;
+  gap: 12px;
+  padding: 10px 18px 8px;
+  height: 104px;
+  min-height: 0;
+  overflow: hidden;
+  background: linear-gradient(180deg, #0c0f13 0%, #07090b 100%);
+  border-bottom: 1px solid var(--studio-line);
+}
+
+.focus-mode .track-display-bar {
+  height: 86px;
+  padding-block: 8px 6px;
+}
+
+.track-display {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.055);
+  border-radius: 6px;
+}
+
+.track-display.deck-right {
+  text-align: right;
+}
+
+.track-deck-label {
+  color: var(--studio-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.track-title {
+  overflow: hidden;
+  color: var(--studio-text);
+  font-size: 15px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track-meta {
+  display: flex;
+  gap: 12px;
+  color: var(--studio-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.deck-right .track-meta {
+  justify-content: flex-end;
+}
+
+.deck-transport-dot {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #343943;
+}
+
+.deck-right .deck-transport-dot {
+  right: auto;
+  left: 10px;
+}
+
+.deck-transport-dot.playing {
+  background: var(--studio-green);
+  box-shadow: 0 0 12px rgba(43, 226, 122, 0.65);
+}
+
+.combined-waveform-area {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.waveform-lane {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: stretch;
+  gap: 6px;
+  min-height: 0;
+}
+
+.waveform-deck-chip {
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.waveform-deck-chip.deck-a {
+  background: rgba(74, 158, 255, 0.28);
+  color: #9ccaff;
+}
+
+.waveform-deck-chip.deck-b {
+  background: rgba(255, 74, 158, 0.25);
+  color: #ff9ac9;
+}
+
+.waveform-container.compact {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 2px;
+  min-width: 0;
+  height: 100%;
+}
+
+.waveform-container.compact canvas {
+  width: 100%;
+  height: 100%;
+  background: #10141b;
+  border: 1px solid rgba(255, 255, 255, 0.055);
+}
+
+.studio-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 8px 18px;
+  min-height: 48px;
+  background: rgba(8, 10, 13, 0.94);
+  border-bottom: 1px solid var(--studio-line);
+}
+
+.toolbar-left,
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.toolbar-button,
+.drawer-close {
+  min-height: 30px;
+  padding: 6px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 5px;
+  background: #121720;
+  color: var(--studio-text);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.toolbar-button.compact {
+  padding-inline: 10px;
+}
+
+.toolbar-button:hover,
+.drawer-close:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: #171e29;
+}
+
+.toolbar-button.active,
+.drawer-close.active {
+  border-color: rgba(74, 158, 255, 0.62);
+  background: rgba(74, 158, 255, 0.16);
+  color: #b9d9ff;
+}
+
+.toolbar-button.shift.active {
+  border-color: rgba(43, 226, 122, 0.72);
+  background: rgba(43, 226, 122, 0.14);
+  color: #b8ffd7;
+}
+
+.toolbar-count {
+  color: var(--studio-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.controller-stage {
+  position: relative;
+  min-height: 0;
+  height: calc(100dvh - 152px);
+  padding: 14px 18px 18px;
+  overflow: hidden;
+}
+
+.focus-mode .controller-stage {
+  height: calc(100dvh - 128px);
+  padding: 8px 12px 12px;
+}
+
+.controller-stage .three-scene-wrapper {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: #050607;
+}
+
+.focus-mode .controller-stage .three-scene-wrapper {
+  min-height: 0;
+}
+
+.controller-stage .three-scene-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.controller-stage canvas {
+  cursor: pointer;
+}
+
+.three-scene-status {
+  color: var(--studio-muted);
+  letter-spacing: 0.02em;
+}
+
+.drawer-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  border: 0;
+  background: rgba(0, 0, 0, 0.28);
+  cursor: default;
+}
+
+.studio-drawer {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  left: 18px;
+  z-index: 30;
+  display: flex;
+  max-height: 42vh;
+  min-height: 260px;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 7px;
+  background: rgba(10, 13, 18, 0.98);
+  box-shadow: 0 -16px 44px rgba(0, 0, 0, 0.48);
+  transform: translateY(calc(100% + 28px));
+  transition: transform 160ms ease;
+}
+
+.studio-drawer.open {
+  transform: translateY(0);
+}
+
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--studio-line);
+  background: #0f131a;
+}
+
+.drawer-header h1,
+.drawer-section h2 {
+  margin: 0;
+  color: var(--studio-text);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.drawer-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px 0;
+  background: rgba(10, 13, 18, 0.98);
+}
+
+.drawer-tab {
+  min-height: 30px;
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom-color: transparent;
+  border-radius: 5px 5px 0 0;
+  background: #111720;
+  color: var(--studio-muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.drawer-tab:hover {
+  color: var(--studio-text);
+  background: #161d28;
+}
+
+.drawer-tab.active {
+  color: #b9d9ff;
+  border-color: rgba(74, 158, 255, 0.5);
+  background: rgba(74, 158, 255, 0.14);
+}
+
+.settings-note {
+  color: var(--studio-muted);
+  font-size: 12px;
+}
+
+.library-panel,
+.equipment-panel,
+.settings-panel {
+  min-height: 0;
+  overflow: auto;
+}
+
+.library-panel {
+  height: 100%;
+}
+
+.library-toolbar {
+  background: #0c1016;
+}
+
+.library-table-container {
+  max-height: none;
+}
+
+.drawer-section {
+  padding: 14px;
+  border-bottom: 1px solid var(--studio-line);
+}
+
+.drawer-section h2 {
+  margin-bottom: 10px;
+  color: var(--studio-muted);
+}
+
+.drawer-section .fx-grid {
+  align-items: stretch;
+}
+
+.drawer-section .fx-panel {
+  background: #111721;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.drawer-section .sampler-grid {
+  grid-template-columns: repeat(8, minmax(84px, 1fr));
+  min-width: 720px;
+}
+
+@media (max-width: 900px) {
+  .track-display-bar {
+    grid-template-columns: 1fr;
+    height: 214px;
+  }
+
+  .studio-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .toolbar-left,
+  .toolbar-right {
+    flex-wrap: wrap;
+  }
+
+  .controller-stage {
+    min-height: 0;
+    height: calc(100dvh - 310px);
+    padding: 10px;
+  }
+
+  .controller-stage .three-scene-wrapper {
+    min-height: 0;
+  }
+}
+
+@media (max-height: 820px) and (min-width: 901px) {
+  .track-display-bar {
+    height: 88px;
+    padding-top: 8px;
+  }
+
+  .controller-stage {
+    min-height: 0;
+    height: calc(100dvh - 136px);
+    padding-top: 10px;
+  }
+
+  .controller-stage .three-scene-wrapper {
+    min-height: 0;
+  }
+}

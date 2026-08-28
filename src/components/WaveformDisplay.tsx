@@ -8,11 +8,12 @@ interface WaveformDisplayProps {
   loop?: LoopState
   hotCues?: HotCue[]
   onClick?: (percent: number) => void
+  compact?: boolean
 }
 
 const HOT_CUE_COLORS = ['#ff4444', '#ff8800', '#ffcc00', '#44ff44', '#44ccff', '#4488ff', '#aa44ff', '#ff44aa']
 
-export function WaveformDisplay({ waveformData, position, duration, loop, hotCues, onClick }: WaveformDisplayProps) {
+export function WaveformDisplay({ waveformData, position, duration, loop, hotCues, onClick, compact = false }: WaveformDisplayProps) {
   const overviewRef = useRef<HTMLCanvasElement>(null)
   const detailRef = useRef<HTMLCanvasElement>(null)
   const animRef = useRef<number>(0)
@@ -26,7 +27,13 @@ export function WaveformDisplay({ waveformData, position, duration, loop, hotCue
     ctx.clearRect(0, 0, w, h)
 
     if (!waveformData || waveformData.peaks.length === 0) {
-      ctx.fillStyle = '#333'; ctx.font = '12px monospace'; ctx.fillText('No waveform', w / 2 - 30, h / 2 + 4)
+      ctx.fillStyle = '#20242c'
+      ctx.fillRect(0, h / 2 - 1, w, 2)
+      ctx.fillStyle = '#646a75'
+      ctx.font = compact ? '10px monospace' : '12px monospace'
+      ctx.textAlign = 'center'
+      ctx.fillText('No track loaded', w / 2, h / 2 - 6)
+      ctx.textAlign = 'start'
       return
     }
 
@@ -71,7 +78,7 @@ export function WaveformDisplay({ waveformData, position, duration, loop, hotCue
       ctx.strokeStyle = '#ff4444'; ctx.lineWidth = 2
       ctx.beginPath(); ctx.moveTo(posX, 0); ctx.lineTo(posX, h); ctx.stroke()
     }
-  }, [waveformData, position, duration, loop, hotCues])
+  }, [waveformData, position, duration, loop, hotCues, compact])
 
   const drawDetail = useCallback(() => {
     const canvas = detailRef.current
@@ -82,7 +89,8 @@ export function WaveformDisplay({ waveformData, position, duration, loop, hotCue
     ctx.clearRect(0, 0, w, h)
 
     if (!waveformData || waveformData.peaks.length === 0 || duration <= 0) {
-      ctx.fillStyle = '#333'; ctx.font = '12px monospace'; ctx.fillText('No waveform data', w / 2 - 40, h / 2 + 4)
+      ctx.fillStyle = '#20242c'
+      ctx.fillRect(0, h / 2 - 1, w, 2)
       return
     }
 
@@ -154,10 +162,10 @@ export function WaveformDisplay({ waveformData, position, duration, loop, hotCue
   )
 
   return (
-    <div className="waveform-container">
-      <canvas ref={overviewRef} width={600} height={60} className="waveform-overview"
+    <div className={`waveform-container ${compact ? 'compact' : ''}`}>
+      <canvas ref={overviewRef} width={600} height={compact ? 26 : 60} className="waveform-overview"
         onClick={handleOverviewClick} style={{ cursor: onClick ? 'pointer' : 'default' }} />
-      <canvas ref={detailRef} width={600} height={80} className="waveform-detail" />
+      <canvas ref={detailRef} width={600} height={compact ? 26 : 80} className="waveform-detail" />
     </div>
   )
 }

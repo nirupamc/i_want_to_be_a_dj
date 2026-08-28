@@ -27,6 +27,10 @@ export interface RuntimeControl {
   rotationMax?: number;
   travelMin?: number;
   travelMax?: number;
+  /** Authored placement retained while applying local fader travel. */
+  basePosition?: THREE.Vector3;
+  /** Authored rotation retained while applying rotary travel. */
+  baseRotation?: THREE.Euler;
   // Per-mesh override for lit (emissive) state. Falls back to defaults.
   litMesh?: THREE.Mesh;
   // Per-mesh override for press travel.
@@ -99,7 +103,8 @@ function makeKnob(id: string, pivotName: string, root: THREE.Object3D, controls:
       maxValue: 1,
       defaultValue: 0.5,
       rotationMin: ROTARY_MIN,
-      rotationMax: ROTARY_MAX
+      rotationMax: ROTARY_MAX,
+      baseRotation: pivot.rotation.clone()
     },
     controls,
     missing
@@ -122,7 +127,8 @@ function makeLinearFader(id: string, faderName: string, root: THREE.Object3D, co
       maxValue: 1,
       defaultValue: 0.5,
       travelMin: 0,
-      travelMax: FADER_TRAVEL
+      travelMax: FADER_TRAVEL,
+      basePosition: fader.position.clone()
     },
     controls,
     missing
@@ -145,7 +151,8 @@ function makeCrossfader(root: THREE.Object3D, controls: Record<string, RuntimeCo
       maxValue: 1,
       defaultValue: 0,
       travelMin: -CROSSFADER_TRAVEL,
-      travelMax: CROSSFADER_TRAVEL
+      travelMax: CROSSFADER_TRAVEL,
+      basePosition: fader.position.clone()
     },
     controls,
     missing
