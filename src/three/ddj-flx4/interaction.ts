@@ -1,6 +1,18 @@
 import * as THREE from "three";
 import type { RuntimeControl } from "./controlRegistry";
 
+export interface ExtraHitTarget {
+  /** Control ID to report when this hit target is picked. */
+  controlId: string;
+  /** Bounding-sphere radius in local units. */
+  radius: number;
+  /** Bounding-sphere center in local space (relative to control.object). */
+  center: THREE.Vector3;
+  /** Optional "rim" — only hits if the pointer's distance from the center
+   *  is at least `innerRadius`. If omitted the hit is a full disc. */
+  innerRadius?: number;
+}
+
 export interface InteractionCallbacks {
   onControlDown?: (id: string) => void;
   onControlUp?: (id: string) => void;
@@ -79,6 +91,7 @@ export class InteractionController {
   private readonly hitGroup = new THREE.Group();
   private readonly controls: Record<string, RuntimeControl>;
   private readonly callbacks: InteractionCallbacks;
+  private readonly extraHits: ExtraHitTarget[] = [];
   private readonly hitByControl = new Map<string, THREE.Mesh>();
   private readonly onPointerMove: (e: PointerEvent) => void;
   private readonly onPointerDown: (e: PointerEvent) => void;
@@ -97,12 +110,14 @@ export class InteractionController {
     scene: THREE.Scene;
     controls: Record<string, RuntimeControl>;
     callbacks: InteractionCallbacks;
+    extraHits?: ExtraHitTarget[];
   }) {
     this.dom = opts.dom;
     this.camera = opts.camera;
     this.scene = opts.scene;
     this.controls = opts.controls;
     this.callbacks = opts.callbacks;
+    this.extraHits = opts.extraHits ?? [];
     this.onPointerMove = (e) => this.handleMove(e);
     this.onPointerDown = (e) => this.handleDown(e);
     this.onPointerUp = (e) => this.handleUp(e);
@@ -183,11 +198,38 @@ export class InteractionController {
     const hits: THREE.Intersection[] = [];
     for (const hit of this.hitByControl.values()) hits.push(...this.raycaster.intersectObject(hit, false));
     hits.sort((a, b) => a.distance - b.distance);
-    if (hits.length === 0) return null;
-    const hit = hits[0];
-    const id = hit.object.userData.controlId as string | undefined;
-    if (!id) return null;
-    return this.controls[id] ?? null;
+    if (hits.length > 0) {
+      const hit = hits[0];
+      const id = hit.object.userData.controlId as string | undefined;
+      if (!id) return null;
+      return this.controls[id] ?? null;
+    }
+    // No box hit — try the extra (jog rim) hit targets. These are
+    // raycasted against a horizontal plane through their center and
+    // require the pointer to fall within the radial annulus.
+    if (this.extraHits.length > 0) {
+      const ray = this.raycaster.ray;
+      let best: { id: string; distance: number } | null = null;
+      for (const extra of this.extraHits) {
+        const ctl = this.controls[extra.controlId];
+        if (!ctl) continue;
+        ctl.object.updateWorldMatrix(true, false);
+        const localCenter = extra.center.clone().applyMatrix4(ctl.object.matrixWorld);
+        const denom = ray.direction.y;
+        if (Math.abs(denom) < 1e-6) continue;
+        const t = (localCenter.y - ray.origin.y) / denom;
+        if (!isFinite(t) || t < 0) continue;
+        const hit = new THREE.Vector3().copy(ray.origin).addScaledVector(ray.direction, t);
+        const d = hit.distanceTo(localCenter);
+        if (d > extra.radius) continue;
+        if (extra.innerRadius !== undefined && d < extra.innerRadius) continue;
+        if (best === null || t < best.distance) {
+          best = { id: extra.controlId, distance: t };
+        }
+      }
+      if (best) return this.controls[best.id] ?? null;
+    }
+    return null;
   }
 
   private handleDown(e: PointerEvent): void {

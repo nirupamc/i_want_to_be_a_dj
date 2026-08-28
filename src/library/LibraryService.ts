@@ -247,6 +247,22 @@ export class LibraryService {
     this._selectedTrackId = trackId
   }
 
+  /** Move selection by a delta (positive = next, negative = previous) over
+   *  the currently displayed (filtered/sorted) track list. */
+  selectByDelta(delta: number): LibraryTrack | null {
+    const list = this.getDisplayTracks()
+    if (list.length === 0) {
+      this._selectedTrackId = null
+      return null
+    }
+    let idx = list.findIndex((t) => t.id === this._selectedTrackId)
+    if (idx < 0) idx = delta > 0 ? -1 : list.length
+    idx = ((idx + delta) % list.length + list.length) % list.length
+    const next = list[idx]
+    this._selectedTrackId = next.id
+    return next
+  }
+
   setSearchQuery(query: string): void {
     this._searchQuery = query
   }

@@ -1277,4 +1277,7 @@ button {
   border-radius: 3px; padding: 3px 6px; font-size: 10px; cursor: pointer;
 }
 .three-debug-actions button:hover { border-color: var(--led); color: var(--led); }
+.three-debug-unbound { margin-top: 6px; padding-top: 6px; border-top: 1px solid #1f242c; color: #b0b6c0; }
+.three-debug-unbound .lbl { color: #ffb347; }
+.three-debug-unbound .unbound-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; opacity: 0.7; }
 

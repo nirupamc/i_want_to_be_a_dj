@@ -8,6 +8,7 @@ import type { LibraryState, LibrarySortField } from './library/libraryTypes'
 import { getLoadedDeckIds } from './library/libraryHelpers'
 import { BEAT_MULTIPLIER_LABELS } from './audio/effects/types'
 import { ThreeScene } from './three/ddj-flx4/ThreeScene'
+import type { LibraryBridge } from './three/ddj-flx4/dispatcher'
 import './index.css'
 
 const FX_TYPES = ['ECHO', 'DELAY', 'REVERB', 'FLANGER', 'FILTER'] as const
@@ -229,6 +230,21 @@ export default function App() {
     refreshLib()
   }, [lib, refreshLib])
 
+  // 3D library bridge — passed into the ThreeScene dispatcher.
+  const libraryBridge = useRef<LibraryBridge | null>(null)
+  if (!libraryBridge.current) {
+    libraryBridge.current = {
+      select: (delta) => {
+        lib.selectByDelta(delta)
+        refreshLib()
+      },
+      load: (deck) => {
+        const sel = lib.getState().selectedTrackId
+        if (sel) loadFromLibrary(sel, deck)
+      }
+    }
+  }
+
   // Sampler file inputs
   const samplerFileRefs = useRef<(HTMLInputElement | null)[]>([])
   const handleSamplerLoad = useCallback((slot: number) => {
@@ -442,9 +458,9 @@ export default function App() {
             )}
           </div>
         </Section>
-        <Section title="3D CONTROLLER (M12A)" defaultOpen={false}>
+        <Section title="3D CONTROLLER (M12B)" defaultOpen={false}>
           <div className="three-scene-section">
-            <ThreeScene interactive={true} />
+            <ThreeScene interactive={true} engine={engine} library={libraryBridge.current!} />
           </div>
         </Section>
       </section>

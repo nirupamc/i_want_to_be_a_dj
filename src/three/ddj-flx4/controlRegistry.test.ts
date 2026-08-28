@@ -158,7 +158,12 @@ describe("M12A control registry", () => {
     const m = buildManifest(root);
     const diff = diffManifestAgainstExpected(m);
     expect(diff.missing).toEqual([]);
-    expect(diff.unexpected).toEqual([]);
+    // M12B adds two extra jog-rim virtual controls; the manifest diff
+    // flags them as "unexpected" because the canonical expected set is
+    // a strict M12A list. They are allowed here.
+    const extraAllowed = [`${CONTROL_IDS.decks.left.jog}.rim`, `${CONTROL_IDS.decks.right.jog}.rim`];
+    const unexpectedFiltered = diff.unexpected.filter((id) => !extraAllowed.includes(id));
+    expect(unexpectedFiltered).toEqual([]);
     expect(diff.duplicates).toEqual([]);
   });
 
@@ -175,7 +180,8 @@ describe("M12A control registry", () => {
       CONTROL_IDS.mixer.channel1.cfx, CONTROL_IDS.mixer.channel2.cfx,
       CONTROL_IDS.mixer.channel1.fader, CONTROL_IDS.mixer.channel2.fader,
       CONTROL_IDS.mixer.crossfader,
-      CONTROL_IDS.decks.left.jog, CONTROL_IDS.decks.right.jog
+      CONTROL_IDS.decks.left.jog, CONTROL_IDS.decks.right.jog,
+      `${CONTROL_IDS.decks.left.jog}.rim`, `${CONTROL_IDS.decks.right.jog}.rim`
     ];
     for (let i = 1; i <= 8; i += 1) {
       must.push(padId("left", i), padId("right", i));

@@ -18,18 +18,26 @@ import { EQ_GAIN_DB_MAX, EQ_GAIN_DB_MIN, FILTER_MAX, FILTER_MIN, TRIM_DB_MAX, TR
 export function eqNormalizedToDb(normalized: number, min = EQ_GAIN_DB_MIN, max = EQ_GAIN_DB_MAX): number {
   const t = clamp01(normalized)
   if (t === 0.5) return 0
+  if (t === 0) return min
+  if (t === 1) return max
   if (t < 0.5) {
-    return (t / 0.5) * min
+    // Lower half: t in [0, 0.5] → db in [min, 0]
+    return min * (1 - 2 * t)
   }
-  return ((t - 0.5) / 0.5) * max
+  // Upper half: t in [0.5, 1] → db in [0, max]
+  return (t - 0.5) / 0.5 * max
 }
 
 /** Inverse: bounded knob dB → knob normalized [0..1]. */
 export function eqDbToNormalized(db: number, min = EQ_GAIN_DB_MIN, max = EQ_GAIN_DB_MAX): number {
   if (db === 0) return 0.5
+  if (db === min) return 0
+  if (db === max) return 1
   if (db < 0) {
-    return clamp01(0.5 * (db / min))
+    // Lower half: db in [min, 0] maps to [0, 0.5]
+    return clamp01(0.5 * (1 - db / min))
   }
+  // Upper half: db in [0, max] maps to [0.5, 1]
   return clamp01(0.5 + 0.5 * (db / max))
 }
 
@@ -47,16 +55,20 @@ export function trimDbToNormalized(db: number, min = TRIM_DB_MIN, max = TRIM_DB_
 export function filterNormalizedToParam(normalized: number, min = FILTER_MIN, max = FILTER_MAX): number {
   const t = clamp01(normalized)
   if (t === 0.5) return 0
+  if (t === 0) return min
+  if (t === 1) return max
   if (t < 0.5) {
-    return (t / 0.5) * min
+    return min * (1 - 2 * t)
   }
-  return ((t - 0.5) / 0.5) * max
+  return (t - 0.5) / 0.5 * max
 }
 
 export function filterParamToNormalized(p: number, min = FILTER_MIN, max = FILTER_MAX): number {
   if (p === 0) return 0.5
+  if (p === min) return 0
+  if (p === max) return 1
   if (p < 0) {
-    return clamp01(0.5 * (p / min))
+    return clamp01(0.5 * (1 - p / min))
   }
   return clamp01(0.5 + 0.5 * (p / max))
 }
@@ -104,3 +116,5 @@ function clampSigned(v: number): number {
   if (v > 1) return 1
   return v
 }
+
+export { clamp01, clampSigned }

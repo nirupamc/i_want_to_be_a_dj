@@ -2,12 +2,22 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { buildControlRegistry, type RuntimeControl } from "./controlRegistry";
-import { applyControlValue, resetAll, setControlLit, setControlPressed } from "./controlVisuals";
-import { InteractionController, type InteractionCallbacks } from "./interaction";
+import { resetAll, setControlLit, setControlPressed } from "./controlVisuals";
+import { InteractionController, type ExtraHitTarget, type InteractionCallbacks } from "./interaction";
+import { ThreeToEngineDispatcher, type LibraryBridge } from "./dispatcher";
+import { StateSync } from "./stateSync";
+import { CONTROL_IDS } from "./controlIds";
+import type { DJEngineHandle } from "../../types";
 
 export interface ThreeSceneProps {
   /** When true the scene renders a "loading" label only — useful for tests. */
   interactive?: boolean;
+  /** Engine handle to bind against. Required. */
+  engine: DJEngineHandle;
+  /** Library bridge for browse/load. */
+  library: LibraryBridge;
+  /** When true, the OrbitControls-style free camera is enabled (debug only). */
+  freeCamera?: boolean;
   /** Hooks for debug HUD. */
   onDebugState?: (state: DebugState) => void;
 }
@@ -21,6 +31,7 @@ export interface DebugState {
   jogDelta: number | null;
   jogVelocity: number | null;
   log: string[];
+  unbound: string[];
 }
 
 interface SceneRefs {
@@ -28,6 +39,8 @@ interface SceneRefs {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   controller: InteractionController | null;
+  dispatcher: ThreeToEngineDispatcher | null;
+  stateSync: StateSync | null;
   controls: Record<string, RuntimeControl>;
   log: string[];
 }
@@ -39,14 +52,14 @@ function appendLog(refs: SceneRefs, line: string, max = 30): void {
   if (refs.log.length > max) refs.log.splice(0, refs.log.length - max);
 }
 
-export function ThreeScene({ interactive = true, onDebugState }: ThreeSceneProps): JSX.Element {
+export function ThreeScene({ interactive = true, engine, library, freeCamera = false, onDebugState }: ThreeSceneProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const refs = useRef<SceneRefs | null>(null);
   const rafRef = useRef<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Debug state mirrored in React for HUD display.
   const [debugState, setDebugState] = useState<DebugState>({
     hoveredId: null,
     pressedId: null,
@@ -55,7 +68,8 @@ export function ThreeScene({ interactive = true, onDebugState }: ThreeSceneProps
     normalized: null,
     jogDelta: null,
     jogVelocity: null,
-    log: []
+    log: [],
+    unbound: []
   });
 
   useEffect(() => {
@@ -74,8 +88,8 @@ export function ThreeScene({ interactive = true, onDebugState }: ThreeSceneProps
     renderer.setSize(container.clientWidth, Math.max(container.clientHeight, 1));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(renderer.domElement);
+    canvasRef.current = renderer.domElement;
 
-    // Lights
     scene.add(new THREE.HemisphereLight(0xffffff, 0x202028, 0.85));
     const key = new THREE.DirectionalLight(0xffffff, 0.7);
     key.position.set(0.3, 0.6, 0.4);
@@ -86,6 +100,8 @@ export function ThreeScene({ interactive = true, onDebugState }: ThreeSceneProps
       scene,
       camera,
       controller: null,
+      dispatcher: null,
+      stateSync: null,
       controls: {},
       log: []
     };
@@ -102,43 +118,80 @@ export function ThreeScene({ interactive = true, onDebugState }: ThreeSceneProps
         refsLocal.controls = controls;
         resetAll(Object.values(controls));
 
+        const dispatcher = new ThreeToEngineDispatcher(engine, library);
+        refsLocal.dispatcher = dispatcher;
+
+        const stateSync = new StateSync({ controls, dispatcher });
+        refsLocal.stateSync = stateSync;
+        stateSync.start();
+
+        // Push the initial engine state to the 3D visuals.
+        stateSync.applyState(engine.getState());
+
+        // Build extra hit targets for the jog rims. We size them using
+        // the visible jog bounding-sphere radius.
+        const extraHits: ExtraHitTarget[] = [];
+        for (const side of ["left", "right"] as const) {
+          const rimId = `${side === "left" ? CONTROL_IDS.decks.left.jog : CONTROL_IDS.decks.right.jog}.rim`;
+          const jogCtl = controls[side === "left" ? CONTROL_IDS.decks.left.jog : CONTROL_IDS.decks.right.jog];
+          if (!jogCtl) continue;
+          jogCtl.object.updateWorldMatrix(true, false);
+          const box = new THREE.Box3().setFromObject(jogCtl.object);
+          const center = new THREE.Vector3();
+          box.getCenter(center);
+          const size = new THREE.Vector3();
+          box.getSize(size);
+          const radius = Math.max(size.x, size.z) * 0.5;
+          const innerRadius = radius * 0.55;
+          // Convert to local space relative to jog pivot.
+          const localCenter = center.clone().applyMatrix4(new THREE.Matrix4().copy(jogCtl.object.matrixWorld).invert());
+          extraHits.push({ controlId: rimId, center: localCenter, radius, innerRadius });
+        }
+
         const callbacks: InteractionCallbacks = {
           onControlDown: (id) => {
             const c = controls[id];
             if (c) setControlPressed(c, true);
+            dispatcher.onDown(c!);
             appendLog(refsLocal, `DOWN ${id}`);
             pushDebug({ pressedId: id, draggingId: id });
           },
           onControlUp: (id) => {
             const c = controls[id];
             if (c) setControlPressed(c, false);
+            dispatcher.onUp(c!);
             appendLog(refsLocal, `UP   ${id}`);
             pushDebug({ pressedId: null, draggingId: null });
           },
           onControlValue: (id, value) => {
             const c = controls[id];
             if (!c) return;
-            if (c.kind === "rotary-bounded" || c.kind === "linear" || c.kind === "crossfader") {
-              applyControlValue(c, value);
-              appendLog(refsLocal, `VAL  ${id} = ${value.toFixed(3)}`);
-              pushDebug({ draggingId: id, normalized: value });
-            } else if (c.kind === "rotary-relative") {
+            // Direct visual update for rotary-relative encoders (browse).
+            if (c.kind === "rotary-relative") {
               c.object.rotation.y += value;
-              appendLog(refsLocal, `ENC  ${id} dY=${value.toFixed(3)}`);
-              pushDebug({ draggingId: id });
             }
+            dispatcher.onValue(c, value);
+            appendLog(refsLocal, `VAL  ${id} = ${value.toFixed(3)}`);
+            pushDebug({ draggingId: id, normalized: value });
           },
           onJogStart: (id) => {
+            const c = controls[id];
+            if (c) dispatcher.onJogStart(c);
             appendLog(refsLocal, `JOG+ ${id}`);
             pushDebug({ draggingId: id });
           },
           onJogMove: (id, info) => {
             const c = controls[id];
-            if (c) c.object.rotation.y += info.deltaRadians;
+            if (c) {
+              c.object.rotation.y += info.deltaRadians;
+              dispatcher.onJogMove(c, info);
+            }
             appendLog(refsLocal, `JOG  ${id} d=${info.deltaRadians.toFixed(3)} v=${info.velocity.toFixed(2)}`);
             pushDebug({ jogDelta: info.deltaRadians, jogVelocity: info.velocity });
           },
           onJogEnd: (id) => {
+            const c = controls[id];
+            if (c) dispatcher.onJogEnd(c);
             appendLog(refsLocal, `JOG- ${id}`);
             pushDebug({ draggingId: null, jogDelta: null, jogVelocity: null });
           },
@@ -152,10 +205,12 @@ export function ThreeScene({ interactive = true, onDebugState }: ThreeSceneProps
           camera,
           scene,
           controls,
-          callbacks
+          callbacks,
+          extraHits
         });
         controller.attach();
         refsLocal.controller = controller;
+        pushDebug({ unbound: dispatcher.adapter.listUnbound() });
         setLoading(false);
       },
       undefined,
@@ -169,7 +224,6 @@ export function ThreeScene({ interactive = true, onDebugState }: ThreeSceneProps
     function pushDebug(patch: Partial<DebugState>): void {
       setDebugState((prev) => {
         const merged = { ...prev, ...patch };
-        // Mirror latest log from refs.
         merged.log = refsLocal.log.slice(-6);
         if (onDebugState) onDebugState(merged);
         return merged;
@@ -197,11 +251,12 @@ export function ThreeScene({ interactive = true, onDebugState }: ThreeSceneProps
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
       refsLocal.controller?.releaseDrag();
       refsLocal.controller?.detach();
+      refsLocal.stateSync?.stop();
       renderer.dispose();
       if (renderer.domElement.parentNode === container) container.removeChild(renderer.domElement);
       refs.current = null;
     };
-  }, [onDebugState]);
+  }, [engine, library, onDebugState, freeCamera]);
 
   return (
     <div className="three-scene-wrapper">
@@ -244,6 +299,12 @@ function DebugOverlay({ state, controls }: { state: DebugState; controls: Record
           {state.jogDelta != null ? state.jogDelta.toFixed(3) : "—"} / {state.jogVelocity != null ? state.jogVelocity.toFixed(2) : "—"}
         </span>
       </div>
+      {state.unbound.length > 0 && (
+        <div className="three-debug-unbound">
+          <div className="lbl">unbound ({state.unbound.length}):</div>
+          {state.unbound.slice(0, 6).map((id) => <div key={id} className="unbound-id">{id}</div>)}
+        </div>
+      )}
       <div className="three-debug-log">
         {state.log.map((line, i) => (
           <div key={i}>{line}</div>
@@ -253,7 +314,6 @@ function DebugOverlay({ state, controls }: { state: DebugState; controls: Record
         <button
           onClick={() => {
             if (!controls) return;
-            // Light every pad for visual verification.
             for (const c of Object.values(controls)) if (c.kind === "pad") setControlLit(c, true);
           }}
         >Light all pads</button>

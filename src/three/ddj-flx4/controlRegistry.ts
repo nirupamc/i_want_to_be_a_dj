@@ -173,6 +173,29 @@ function makeJog(id: string, side: "left" | "right", root: THREE.Object3D, contr
   );
 }
 
+function makeJogRim(id: string, side: "left" | "right", root: THREE.Object3D, controls: Record<string, RuntimeControl>, missing: string[]): void {
+  // The rim shares the same pivot as the platter; the interaction layer
+  // uses an extra-hit target with a different controlId to disambiguate.
+  const pivot = firstByName(root, `${side === "left" ? "Left" : "Right"}JogWheelPivot`);
+  if (!pivot) {
+    missing.push(id);
+    return;
+  }
+  add(
+    {
+      id,
+      kind: "jog",
+      object: pivot,
+      axis: "y",
+      minValue: NEG_INF,
+      maxValue: POS_INF,
+      defaultValue: 0
+    },
+    controls,
+    missing
+  );
+}
+
 function makeButton(id: string, objectName: string, root: THREE.Object3D, controls: Record<string, RuntimeControl>, missing: string[]): void {
   const obj = firstByName(root, objectName);
   if (!obj) {
@@ -223,6 +246,9 @@ export function buildControlRegistry(root: THREE.Object3D): RegistryBuildResult 
   // Jogs
   makeJog(CONTROL_IDS.decks.left.jog, "left", root, controls, missing);
   makeJog(CONTROL_IDS.decks.right.jog, "right", root, controls, missing);
+  // Jog rim — same pivot, separate hit target registered in the interaction layer.
+  makeJogRim(`${CONTROL_IDS.decks.left.jog}.rim`, "left", root, controls, missing);
+  makeJogRim(`${CONTROL_IDS.decks.right.jog}.rim`, "right", root, controls, missing);
 
   // Tempo faders
   makeLinearFader(CONTROL_IDS.decks.left.tempo, "LeftTempoFader", root, controls, missing);
