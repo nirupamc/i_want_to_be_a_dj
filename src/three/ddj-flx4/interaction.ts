@@ -86,6 +86,23 @@ function makeHitBox(control: RuntimeControl, sizeMultiplier = 2.2, _height = 0.0
   box.getSize(size);
   const center = new THREE.Vector3();
   box.getCenter(center);
+  if (control.hitboxCenter && control.hitboxSize) {
+    const geometry = new THREE.BoxGeometry(
+      Math.max(control.hitboxSize.x, 0.005),
+      Math.max(control.hitboxSize.y, _height),
+      Math.max(control.hitboxSize.z, 0.005)
+    );
+    const material = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.copy(control.hitboxCenter);
+    mesh.userData.controlId = control.id;
+    mesh.userData.controlKind = control.kind;
+    mesh.userData.control = control;
+    mesh.userData.__interactionHitbox = true;
+    mesh.userData.visualWorldBox = visualWorldBox.clone();
+    mesh.name = `${control.object.name ?? control.id}Hit`;
+    return mesh;
+  }
   const geo = new THREE.BoxGeometry(
     Math.max(size.x, 0.005) * sizeMultiplier,
     Math.max(size.y * sizeMultiplier, _height),

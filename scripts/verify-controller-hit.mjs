@@ -11,7 +11,7 @@ const tabs = await new Promise((resolve, reject) => {
 
 const APP_URL = process.env.APP_URL ?? 'http://localhost:5173/'
 const tabOrigin = new URL(APP_URL).origin
-const tab = tabs.find((entry) => entry.url.startsWith(tabOrigin))
+const tab = tabs.find((entry) => entry.url.startsWith(tabOrigin)) ?? tabs.find((entry) => entry.type === 'page')
 if (!tab?.webSocketDebuggerUrl) throw new Error('No debuggable localhost page')
 
 const ws = new WebSocket(tab.webSocketDebuggerUrl)
@@ -44,7 +44,8 @@ async function evaluate(expression) {
 }
 
 await send('Runtime.enable')
-await send('Emulation.setDeviceMetricsOverride', { width: 1728, height: 900, deviceScaleFactor: 1, mobile: false })
+const [viewportWidth, viewportHeight] = (process.env.VERIFY_VIEWPORT ?? '1728x900').split('x').map(Number)
+await send('Emulation.setDeviceMetricsOverride', { width: viewportWidth, height: viewportHeight, deviceScaleFactor: 1, mobile: false })
 await send('Page.navigate', { url: APP_URL })
 await new Promise((resolve) => setTimeout(resolve, 5000))
 await send('Page.reload', { ignoreCache: true })

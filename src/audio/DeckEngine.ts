@@ -81,17 +81,19 @@ export class DeckEngine implements DeckTransport {
     this._scratchPosition = 0
   }
 
-  play(): void {
-    if (!this.buffer) return
-    if (this._isPlaying) return
+  async play(): Promise<boolean> {
+    if (!this.buffer) return false
+    if (this._isPlaying) return true
     // If scratching, ignore play — scratch owns transport
-    if (this._isScratching) return
-    this.audio.ensureRunning()
+    if (this._isScratching) return false
+    const running = this.audio.ensureRunning()
+    if (!this.audio.isRunning) await running
     this._createSource()
-    if (!this.source) return
+    if (!this.source) return false
     this.source.start(0, this.startOffset % this.buffer.duration)
     this.startTime = this.audio.context.currentTime
     this._isPlaying = true
+    return true
   }
 
   pause(): void {
@@ -294,16 +296,18 @@ export class DeckEngine implements DeckTransport {
    * Resume normal playback after scratch.
    * Called by DJEngine based on wasPlayingBeforeScratch state.
    */
-  resumeAfterScratch(): void {
-    if (!this.buffer) return
-    if (this._isScratching) return
+  async resumeAfterScratch(): Promise<boolean> {
+    if (!this.buffer) return false
+    if (this._isScratching) return false
 
-    this.audio.ensureRunning()
+    const running = this.audio.ensureRunning()
+    if (!this.audio.isRunning) await running
     this._createSource()
-    if (!this.source) return
+    if (!this.source) return false
     this.source.start(0, this.startOffset % this.buffer.duration)
     this.startTime = this.audio.context.currentTime
     this._isPlaying = true
+    return true
   }
 
   // ── Private scratch helpers ──────────────────────────────────────

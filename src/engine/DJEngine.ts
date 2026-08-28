@@ -145,6 +145,7 @@ export function createDJEngine(): DJEngineHandle {
     sampler: createSamplerState(),
     shiftPressed: false,
     fx: createFxState(),
+    transportError: null,
   }
 
   const waveformCache: WaveformCache = {}
@@ -152,8 +153,40 @@ export function createDJEngine(): DJEngineHandle {
   let raf: number | null = null
   let meterTimer: number | null = null
 
+  function snapshotState(): DJState {
+    return {
+      ...state,
+      decks: [
+        { ...state.decks[0] },
+        { ...state.decks[1] },
+      ],
+      mixer: {
+        ...state.mixer,
+        channels: [
+          { ...state.mixer.channels[0] },
+          { ...state.mixer.channels[1] },
+        ],
+      },
+      master: { ...state.master },
+      sampler: {
+        ...state.sampler,
+        slots: [...state.sampler.slots] as DJState['sampler']['slots'],
+      },
+      fx: {
+        beatFx: { ...state.fx.beatFx },
+        releaseFx: { ...state.fx.releaseFx },
+        smartCfx: [
+          { ...state.fx.smartCfx[0] },
+          { ...state.fx.smartCfx[1] },
+        ],
+        smartFader: { ...state.fx.smartFader },
+      },
+    }
+  }
+
   function publish(): void {
-    for (const l of listeners) l(state)
+    const nextState = snapshotState()
+    for (const l of listeners) l(nextState)
   }
 
   function startTicker(): void {
@@ -167,6 +200,9 @@ export function createDJEngine(): DJEngineHandle {
       for (let i = 0; i < SAMPLER_SLOT_COUNT; i++) {
         state.sampler.slots[i].playing = sampler.isSlotPlaying(i)
       }
+      syncDeck(0)
+      syncDeck(1)
+      publish()
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
@@ -242,7 +278,7 @@ export function createDJEngine(): DJEngineHandle {
     s.duration = d.duration
     s.playbackRate = d.playbackRate
     s.nudging = d.nudging
-    const sourceBpm = resolveSourceBpmLocal(s.analysis)
+    const sourceBpm = resolveSourceBpmLocal(s.analysis) ?? d.currentTrack?.bpm ?? null
     s.originalBpm = sourceBpm
     s.effectiveBpm = calcEffectiveBpm(sourceBpm, d.playbackRate)
   }
@@ -714,6 +750,27 @@ export function createDJEngine(): DJEngineHandle {
 
   // ── Main action handler ────────────────────────────────────────
 
+  async function handlePlay(deckIndex: 0 | 1): Promise<void> {
+    const d = decks[deckIndex]
+    state.transportError = null
+    try {
+      if (state.decks[deckIndex].scratch.active) handleScratchEnd(deckIndex)
+      const startResult = d.play()
+      const started = d.isPlaying ? true : await startResult
+      if (!started) {
+        throw new Error(state.decks[deckIndex].track ? 'Deck source could not be started' : 'Load a track before pressing Play')
+      }
+      syncDeck(deckIndex)
+      startTicker()
+      startMeterPoll()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Playback could not start'
+      state.transportError = `Deck ${deckIndex === 0 ? 'A' : 'B'}: ${message}`
+      syncDeck(deckIndex)
+    }
+    publish()
+  }
+
   function handle(action: Action): void {
     switch (action.type) {
       case 'LOAD_TRACK': {
@@ -734,13 +791,8 @@ export function createDJEngine(): DJEngineHandle {
         break
       }
       case 'PLAY': {
-        const d = decks[action.deck]
-        if (state.decks[action.deck].scratch.active) handleScratchEnd(action.deck)
-        d.play()
-        syncDeck(action.deck)
-        startTicker()
-        startMeterPoll()
-        break
+        void handlePlay(action.deck)
+        return
       }
       case 'PAUSE': {
         const d = decks[action.deck]
@@ -1027,6 +1079,7 @@ export function createDJEngine(): DJEngineHandle {
       listeners.push(l)
       return () => { const i = listeners.indexOf(l); if (i >= 0) listeners.splice(i, 1) }
     },
+    getWaveform: (trackId: string) => waveformCache[trackId] ?? null,
     loadTrack: (deck, track) => handle({ type: 'LOAD_TRACK', deck, track }),
     loadSample: (slot, file) => loadSample(slot, file),
     destroy: () => {

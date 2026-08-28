@@ -22,6 +22,7 @@ import {
 } from './libraryHelpers'
 import { analyzeTrack } from '../analysis/TrackAnalyzer'
 import type { TrackAnalysis } from '../analysis/analysisTypes'
+import { getAudioEngine } from '../audio'
 
 export interface LibraryServiceOptions {
   onTrackAdded?: (track: LibraryTrack) => void
@@ -185,11 +186,7 @@ export class LibraryService {
     this.options.onTrackUpdated?.(track)
 
     try {
-      // Decode audio
-      const arrayBuffer = await file.arrayBuffer()
-      const audioContext = new AudioContext()
-      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
-      audioContext.close()
+      const audioBuffer = await getAudioEngine().decode(file)
 
       // Run analysis
       const result = analyzeTrack(audioBuffer)

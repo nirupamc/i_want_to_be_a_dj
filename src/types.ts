@@ -3,6 +3,9 @@ export interface Track {
   name: string
   buffer: AudioBuffer
   duration: number
+  title?: string
+  artist?: string | null
+  bpm?: number | null
 }
 
 // Tempo range in percent: ±6%, ±10%, ±16%, or WIDE (±100%)
@@ -193,6 +196,7 @@ export interface DJState {
   sampler: SamplerState
   shiftPressed: boolean
   fx: FXState
+  transportError: string | null
 }
 
 export type Action =
@@ -284,6 +288,7 @@ export interface DJEngineHandle {
   getState: () => DJState
   dispatch: (action: Action) => void
   subscribe: (listener: (state: DJState) => void) => Unsubscribe
+  getWaveform: (trackId: string) => WaveformData | null
   loadTrack: (deck: 0 | 1, track: Track) => void
   loadSample: (slot: number, file: File) => void
   destroy: () => void
@@ -292,7 +297,7 @@ export interface DJEngineHandle {
 export interface DeckTransport {
   readonly id: number
   load(buffer: AudioBuffer, track?: Track): void
-  play(): void
+  play(): Promise<boolean>
   pause(): void
   stop(): void
   seek(seconds: number): void

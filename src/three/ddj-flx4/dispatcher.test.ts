@@ -12,6 +12,9 @@ function buildFakeModel(): THREE.Object3D {
     const deck = new THREE.Object3D(); deck.name = `${side}Deck`; root.add(deck);
     const j = new THREE.Object3D(); j.name = `${side}JogWheelPivot`; deck.add(j);
     const t = new THREE.Object3D(); t.name = `${side}TempoFader`; deck.add(t);
+    const tempoTrack = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.002, 0.1), new THREE.MeshBasicMaterial()); tempoTrack.name = `${side}TempoFaderTrack`; t.add(tempoTrack);
+    const tempoHandle = new THREE.Object3D(); tempoHandle.name = `${side}TempoFaderHandle`; t.add(tempoHandle);
+    const tempoCap = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.006, 0.012), new THREE.MeshBasicMaterial()); tempoCap.name = `${side}TempoFaderHandleBody`; tempoHandle.add(tempoCap);
     const cfx = new THREE.Object3D(); cfx.name = `${side === "Left" ? "CFX" : "CFX"}1Pivot`; deck.add(cfx); // unused
     for (let i = 1; i <= 8; i++) {
       const p = new THREE.Object3D(); p.name = `${side}Pad${String(i).padStart(2, "0")}`; deck.add(p);
@@ -28,6 +31,12 @@ function buildFakeModel(): THREE.Object3D {
   const mixer = new THREE.Object3D(); mixer.name = "Mixer"; root.add(mixer);
   for (const name of ["ChannelFader1", "ChannelFader2", "Crossfader", "BrowseEncoderPivot", "BeatFxChannelSelect"]) {
     const p = new THREE.Object3D(); p.name = name; mixer.add(p);
+    if (name !== "BrowseEncoderPivot" && name !== "BeatFxChannelSelect") {
+      const cross = name === "Crossfader";
+      const track = new THREE.Mesh(cross ? new THREE.BoxGeometry(0.1, 0.002, 0.01) : new THREE.BoxGeometry(0.01, 0.002, 0.1), new THREE.MeshBasicMaterial()); track.name = `${name}Track`; p.add(track);
+      const handle = new THREE.Object3D(); handle.name = `${name}Handle`; p.add(handle);
+      const cap = new THREE.Mesh(cross ? new THREE.BoxGeometry(0.012, 0.006, 0.02) : new THREE.BoxGeometry(0.02, 0.006, 0.012), new THREE.MeshBasicMaterial()); cap.name = `${name}HandleBody`; handle.add(cap);
+    }
   }
   for (const knob of ["Trim", "High", "Mid", "Low", "CFX"]) {
     for (const ch of [1, 2]) {

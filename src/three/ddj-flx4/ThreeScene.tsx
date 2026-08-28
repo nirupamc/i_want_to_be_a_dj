@@ -16,7 +16,8 @@ import {
   fitCameraToController
 } from "./presentation";
 import type { DJEngineHandle } from "../../types";
-import { calibrateControllerMaterials } from "./visualCalibration";
+import { applyForcedMaterialProbe, auditVisibleMaterials, calibrateControllerMaterials } from "./visualCalibration";
+import { getControllerTheme, type ControllerThemeId } from "../../customization/controllerCustomization";
 
 export interface ThreeSceneProps {
   /** When true the scene renders a "loading" label only — useful for tests. */
@@ -29,6 +30,7 @@ export interface ThreeSceneProps {
   freeCamera?: boolean;
   /** Shows raw IDs, event logs, and development controls. */
   showDebug?: boolean;
+  themeId?: ControllerThemeId;
   /** Hooks for debug HUD. */
   onDebugState?: (state: DebugState) => void;
 }
@@ -80,7 +82,7 @@ function frameModel(camera: THREE.OrthographicCamera, container: HTMLElement, bo
   });
 }
 
-export function ThreeScene({ interactive = true, engine, library, freeCamera = false, showDebug = false, onDebugState }: ThreeSceneProps): JSX.Element {
+export function ThreeScene({ interactive = true, engine, library, freeCamera = false, showDebug = false, themeId = 'default-dark', onDebugState }: ThreeSceneProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const refs = useRef<SceneRefs | null>(null);
@@ -106,7 +108,8 @@ export function ThreeScene({ interactive = true, engine, library, freeCamera = f
     if (!container) return;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x050607);
+    const theme = getControllerTheme(themeId);
+    scene.background = new THREE.Color(themeId === 'accent-neon' ? 0x05070b : 0x06080b);
 
     const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.001, 10);
     frameModel(camera, container, null);
@@ -117,18 +120,18 @@ export function ThreeScene({ interactive = true, engine, library, freeCamera = f
     renderer.setSize(initialSize.w, initialSize.h, false);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.35;
+    renderer.toneMappingExposure = theme.exposure;
     container.appendChild(renderer.domElement);
     canvasRef.current = renderer.domElement;
 
-    scene.add(new THREE.HemisphereLight(0xdce7f5, 0x0b0d11, 0.55));
-    const key = new THREE.DirectionalLight(0xffffff, 1.8);
-    key.position.set(-0.45, 1.35, -0.55);
+    scene.add(new THREE.HemisphereLight(0xf0f6ff, 0x0a0d12, 0.74));
+    const key = new THREE.DirectionalLight(0xffffff, 2.35);
+    key.position.set(-0.55, 1.55, -0.62);
     scene.add(key);
-    const fill = new THREE.DirectionalLight(0x9ebeff, 0.58);
+    const fill = new THREE.DirectionalLight(themeId === 'accent-neon' ? 0xffb16d : 0x9ec6ff, 0.82);
     fill.position.set(0.75, 0.9, 0.5);
     scene.add(fill);
-    const rim = new THREE.DirectionalLight(0xffd9b0, 0.32);
+    const rim = new THREE.DirectionalLight(new THREE.Color(theme.accent), 0.62);
     rim.position.set(0, 0.65, 1.1);
     scene.add(rim);
 
@@ -169,10 +172,14 @@ export function ThreeScene({ interactive = true, engine, library, freeCamera = f
           else if (material) materials.add(material);
         });
         const loadedNodeCount = countSceneNodes(model);
-        const materialCalibration = calibrateControllerMaterials(model);
+        const originalMaterials = import.meta.env.DEV && new URLSearchParams(window.location.search).get("materialMode") === "original";
+        const materialCalibration = calibrateControllerMaterials(model, !originalMaterials, themeId);
+        const materialProbe = import.meta.env.DEV && new URLSearchParams(window.location.search).get("materialProbe") === "forced";
+        if (materialProbe) applyForcedMaterialProbe(model);
         model.name = "DDJ_FLX4_LoadedRoot";
         const presentationRoot = createControllerPresentationRoot(model);
         scene.add(presentationRoot);
+        presentationRoot.updateMatrixWorld(true);
         const modelBox = new THREE.Box3().setFromObject(presentationRoot);
         refsLocal.modelBox = modelBox;
         frameModel(camera, container, modelBox);
@@ -323,8 +330,21 @@ export function ThreeScene({ interactive = true, engine, library, freeCamera = f
               antialias: true,
               shadows: renderer.shadowMap.enabled
             },
-            lighting: { hemisphere: 0.55, key: 1.8, fill: 0.58, rim: 0.32 },
+            lighting: { hemisphere: 0.74, key: 2.35, fill: 0.82, rim: 0.62 },
+            themeId,
             materialRoles: materialCalibration.roleCounts,
+            materialMode: originalMaterials ? "original" : "calibrated",
+            materialCoverage: {
+              total: materialCalibration.materialCount,
+              classified: materialCalibration.classifiedMaterialCount,
+              unclassified: materialCalibration.materialCount - materialCalibration.classifiedMaterialCount
+            },
+            materialAudit: materialCalibration.audit,
+            visibleMaterialAudit: auditVisibleMaterials(model, [
+              "Trim1TopCap", "Trim1OrientationMarker", "High1TopCap", "ChannelFader1HandleBody",
+              "CrossfaderHandleBody", "LeftJogWheelOuterRim", "LeftPad01Top", "LeftPlayPauseTop", "Trim1PanelLabel"
+            ]),
+            materialProbe: materialProbe ? "forced" : "none",
             distinctiveNames,
             modelPosition: model.position.toArray(),
             modelRotation: model.rotation.toArray(),
@@ -427,7 +447,7 @@ export function ThreeScene({ interactive = true, engine, library, freeCamera = f
       if (renderer.domElement.parentNode === container) container.removeChild(renderer.domElement);
       refs.current = null;
     };
-  }, [engine, library, onDebugState, freeCamera]);
+  }, [engine, library, onDebugState, freeCamera, themeId]);
 
   useEffect(() => {
     showDebugRef.current = showDebug;

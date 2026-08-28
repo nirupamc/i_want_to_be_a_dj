@@ -5,6 +5,7 @@ interface WaveformDisplayProps {
   waveformData: WaveformData | null
   position: number
   duration: number
+  beatGrid?: { bpm: number; firstBeatSeconds: number; beats: number[] } | null
   loop?: LoopState
   hotCues?: HotCue[]
   onClick?: (percent: number) => void
@@ -13,7 +14,7 @@ interface WaveformDisplayProps {
 
 const HOT_CUE_COLORS = ['#ff4444', '#ff8800', '#ffcc00', '#44ff44', '#44ccff', '#4488ff', '#aa44ff', '#ff44aa']
 
-export function WaveformDisplay({ waveformData, position, duration, loop, hotCues, onClick, compact = false }: WaveformDisplayProps) {
+export function WaveformDisplay({ waveformData, position, duration, beatGrid, loop, hotCues, onClick, compact = false }: WaveformDisplayProps) {
   const overviewRef = useRef<HTMLCanvasElement>(null)
   const detailRef = useRef<HTMLCanvasElement>(null)
   const animRef = useRef<number>(0)
@@ -29,21 +30,35 @@ export function WaveformDisplay({ waveformData, position, duration, loop, hotCue
     if (!waveformData || waveformData.peaks.length === 0) {
       ctx.fillStyle = '#20242c'
       ctx.fillRect(0, h / 2 - 1, w, 2)
-      ctx.fillStyle = '#646a75'
-      ctx.font = compact ? '10px monospace' : '12px monospace'
-      ctx.textAlign = 'center'
-      ctx.fillText('No track loaded', w / 2, h / 2 - 6)
-      ctx.textAlign = 'start'
+      if (!compact) {
+        ctx.fillStyle = '#646a75'
+        ctx.font = '12px monospace'
+        ctx.textAlign = 'center'
+        ctx.fillText('No track loaded', w / 2, h / 2 - 6)
+        ctx.textAlign = 'start'
+      }
       return
     }
 
     const peaks = waveformData.peaks
+    const posX = duration > 0 ? Math.max(0, Math.min(w, (position / duration) * w)) : 0
     const barWidth = Math.max(1, w / peaks.length)
     for (let i = 0; i < peaks.length; i++) {
       const x = (i / peaks.length) * w
       const peakH = peaks[i] * h * 0.8
-      ctx.fillStyle = '#4a9eff'
+      ctx.fillStyle = x <= posX ? '#8fd0ff' : '#2f83d8'
       ctx.fillRect(x, (h - peakH) / 2, barWidth, peakH)
+    }
+
+    if (beatGrid && duration > 0) {
+      for (let i = 0; i < beatGrid.beats.length; i++) {
+        const beat = beatGrid.beats[i]
+        if (beat < 0 || beat > duration) continue
+        const x = (beat / duration) * w
+        ctx.strokeStyle = i % 4 === 0 ? 'rgba(255, 255, 255, 0.42)' : 'rgba(255, 255, 255, 0.18)'
+        ctx.lineWidth = i % 4 === 0 ? 1.5 : 1
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke()
+      }
     }
 
     // Loop overlay
@@ -74,11 +89,13 @@ export function WaveformDisplay({ waveformData, position, duration, loop, hotCue
 
     // Position indicator
     if (duration > 0) {
-      const posX = (position / duration) * w
-      ctx.strokeStyle = '#ff4444'; ctx.lineWidth = 2
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2
+      ctx.shadowColor = 'rgba(255, 74, 74, 0.85)'
+      ctx.shadowBlur = 6
       ctx.beginPath(); ctx.moveTo(posX, 0); ctx.lineTo(posX, h); ctx.stroke()
+      ctx.shadowBlur = 0
     }
-  }, [waveformData, position, duration, loop, hotCues, compact])
+  }, [waveformData, position, duration, beatGrid, loop, hotCues, compact])
 
   const drawDetail = useCallback(() => {
     const canvas = detailRef.current
@@ -107,8 +124,19 @@ export function WaveformDisplay({ waveformData, position, duration, loop, hotCue
     for (let i = 0; i < visiblePeaks.length; i++) {
       const x = (i / visiblePeaks.length) * w
       const peakH = visiblePeaks[i] * h * 0.8
-      ctx.fillStyle = '#4a9eff'
+      ctx.fillStyle = i < visiblePeaks.length / 2 ? '#8fd0ff' : '#2f83d8'
       ctx.fillRect(x, (h - peakH) / 2, barWidth, peakH)
+    }
+
+    if (beatGrid) {
+      for (let i = 0; i < beatGrid.beats.length; i++) {
+        const beat = beatGrid.beats[i]
+        if (beat < startSec || beat > endSec) continue
+        const x = ((beat - startSec) / (endSec - startSec)) * w
+        ctx.strokeStyle = i % 4 === 0 ? 'rgba(255, 255, 255, 0.48)' : 'rgba(255, 255, 255, 0.2)'
+        ctx.lineWidth = i % 4 === 0 ? 1.5 : 1
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke()
+      }
     }
 
     // Loop boundaries
@@ -139,11 +167,14 @@ export function WaveformDisplay({ waveformData, position, duration, loop, hotCue
     }
 
     // Playhead
-    ctx.strokeStyle = '#ff4444'; ctx.lineWidth = 2
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2
+    ctx.shadowColor = 'rgba(255, 74, 74, 0.85)'
+    ctx.shadowBlur = 6
     ctx.beginPath(); ctx.moveTo(w / 2, 0); ctx.lineTo(w / 2, h); ctx.stroke()
+    ctx.shadowBlur = 0
     ctx.fillStyle = '#ff4444'
     ctx.beginPath(); ctx.moveTo(w / 2 - 4, 0); ctx.lineTo(w / 2 + 4, 0); ctx.lineTo(w / 2, 6); ctx.closePath(); ctx.fill()
-  }, [waveformData, position, duration, loop, hotCues])
+  }, [waveformData, position, duration, beatGrid, loop, hotCues])
 
   useEffect(() => {
     const animate = () => { drawOverview(); drawDetail(); animRef.current = requestAnimationFrame(animate) }

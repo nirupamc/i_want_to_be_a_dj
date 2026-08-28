@@ -4,11 +4,22 @@ import { LibraryService } from './library/LibraryService'
 import type { LibraryState, LibrarySortField } from './library/libraryTypes'
 import { getLoadedDeckIds } from './library/libraryHelpers'
 import { BEAT_MULTIPLIER_LABELS } from './audio/effects/types'
+import { getAudioEngine } from './audio'
 import { WaveformDisplay } from './components/WaveformDisplay'
 import { ThreeScene } from './three/ddj-flx4/ThreeScene'
 import type { LibraryBridge } from './three/ddj-flx4/dispatcher'
 import type { DeckState } from './types'
 import { isEditableTarget } from './input/keyboard'
+import { formatRemaining, formatTime, resolveDeckBpmLabel } from './selectors/deckDisplay'
+import { StickerLayer } from './customization/StickerLayer'
+import {
+  CONTROLLER_THEMES,
+  createSticker,
+  removeSticker,
+  updateSticker,
+  type ControllerSticker,
+  type ControllerThemeId,
+} from './customization/controllerCustomization'
 import './index.css'
 
 const FX_TYPES = ['ECHO', 'DELAY', 'REVERB', 'FLANGER', 'FILTER'] as const
@@ -17,33 +28,24 @@ const FX_TARGETS = ['A', 'B', 'MASTER'] as const
 type Drawer = 'library' | 'equipment' | 'settings' | null
 type EquipmentTab = 'effects' | 'sampler' | 'midi'
 
-function formatTime(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds <= 0) return '00:00'
-  const m = Math.floor(seconds / 60)
-  const s = Math.floor(seconds % 60)
-  return `${m}:${String(s).padStart(2, '0')}`
-}
-
 function DeckTrackDisplay({ deck, side }: { deck: DeckState; side: 'left' | 'right' }) {
-  const bpm = deck.effectiveBpm ?? deck.analysis.manualBpm ?? deck.analysis.analyzedBpm
-  const remaining = Math.max(0, deck.duration - deck.position)
-
   return (
     <section className={`track-display deck-${side}`}>
       <div className="track-deck-label">Deck {deck.id === 0 ? 'A' : 'B'}</div>
       <div className="track-title" title={deck.track?.name ?? 'No track loaded'}>
-        {deck.track?.name ?? 'No track loaded'}
+        {deck.track?.title ?? deck.track?.name ?? 'No track loaded'}
       </div>
+      {deck.track?.artist && <div className="track-artist">{deck.track.artist}</div>}
       <div className="track-meta">
-        <span>{bpm != null ? `${bpm.toFixed(1)} BPM` : '-- BPM'}</span>
-        <span>{formatTime(deck.position)} / -{formatTime(remaining)}</span>
+        <span className="bpm-badge">{resolveDeckBpmLabel(deck)} BPM</span>
+        <span className="time-pair">{formatTime(deck.position)} / {formatRemaining(deck.position, deck.duration)}</span>
       </div>
       <div className={`deck-transport-dot ${deck.isPlaying ? 'playing' : ''}`} />
     </section>
   )
 }
 
-function TrackDisplayBar({ state, onSeek }: { state: DJState; onSeek: (deck: 0 | 1, percent: number) => void }) {
+function TrackDisplayBar({ state, engine, onSeek }: { state: DJState; engine: DJEngineHandle; onSeek: (deck: 0 | 1, percent: number) => void }) {
   return (
     <header className="track-display-bar">
       <DeckTrackDisplay deck={state.decks[0]} side="left" />
@@ -52,9 +54,10 @@ function TrackDisplayBar({ state, onSeek }: { state: DJState; onSeek: (deck: 0 |
           <span className="waveform-deck-chip deck-a">A</span>
           <WaveformDisplay
             compact
-            waveformData={null}
+            waveformData={state.decks[0].track ? engine.getWaveform(state.decks[0].track.id) : null}
             position={state.decks[0].position}
             duration={state.decks[0].duration}
+            beatGrid={state.decks[0].analysis.beatGrid}
             loop={state.decks[0].loop}
             hotCues={state.decks[0].hotCues}
             onClick={(percent) => onSeek(0, percent)}
@@ -64,9 +67,10 @@ function TrackDisplayBar({ state, onSeek }: { state: DJState; onSeek: (deck: 0 |
           <span className="waveform-deck-chip deck-b">B</span>
           <WaveformDisplay
             compact
-            waveformData={null}
+            waveformData={state.decks[1].track ? engine.getWaveform(state.decks[1].track.id) : null}
             position={state.decks[1].position}
             duration={state.decks[1].duration}
+            beatGrid={state.decks[1].analysis.beatGrid}
             loop={state.decks[1].loop}
             hotCues={state.decks[1].hotCues}
             onClick={(percent) => onSeek(1, percent)}
@@ -441,15 +445,34 @@ function SettingsPanel({
   state,
   midiSupported,
   debugEnabled,
+  themeId,
+  stickers,
+  selectedStickerId,
   onToggleDebug,
   onMasterChange,
+  onThemeChange,
+  onStickerFile,
+  onSelectSticker,
+  onUpdateSticker,
+  onRemoveSticker,
 }: {
   state: DJState
   midiSupported: boolean
   debugEnabled: boolean
+  themeId: ControllerThemeId
+  stickers: ControllerSticker[]
+  selectedStickerId: string | null
   onToggleDebug: () => void
   onMasterChange: (level: number) => void
+  onThemeChange: (theme: ControllerThemeId) => void
+  onStickerFile: (event: React.ChangeEvent<HTMLInputElement>) => void
+  onSelectSticker: (id: string | null) => void
+  onUpdateSticker: (id: string, patch: Partial<Omit<ControllerSticker, 'id' | 'imageDataUrl'>>) => void
+  onRemoveSticker: (id: string) => void
 }) {
+  const stickerFileRef = useRef<HTMLInputElement>(null)
+  const selectedSticker = stickers.find((sticker) => sticker.id === selectedStickerId) ?? null
+
   return (
     <div className="settings-panel">
       <section className="drawer-section">
@@ -464,6 +487,53 @@ function SettingsPanel({
       <section className="drawer-section">
         <h2>Preferences</h2>
         <div className="settings-note">MIDI support: {midiSupported ? 'available' : 'unavailable in this browser'}</div>
+      </section>
+
+      <section className="drawer-section customization-section">
+        <h2>Controller</h2>
+        <div className="theme-options" role="group" aria-label="Controller theme">
+          {CONTROLLER_THEMES.map((theme) => (
+            <button
+              key={theme.id}
+              className={`theme-option ${themeId === theme.id ? 'active' : ''}`}
+              onClick={() => onThemeChange(theme.id)}
+              type="button"
+            >
+              <span className="theme-swatch" style={{ background: theme.accent }} />
+              <span>{theme.label}</span>
+            </button>
+          ))}
+        </div>
+        <div className="sticker-controls">
+          <button className="import-btn" type="button" onClick={() => stickerFileRef.current?.click()}>Add sticker</button>
+          <input ref={stickerFileRef} type="file" accept="image/*" hidden onChange={onStickerFile} />
+          {stickers.length > 0 && (
+            <select value={selectedStickerId ?? ''} onChange={(event) => onSelectSticker(event.target.value || null)} aria-label="Selected sticker">
+              <option value="">No sticker selected</option>
+              {stickers.map((sticker) => <option key={sticker.id} value={sticker.id}>{sticker.name}</option>)}
+            </select>
+          )}
+        </div>
+        {selectedSticker && (
+          <div className="sticker-adjustments">
+            <label className="control">
+              <span>Scale</span>
+              <input type="range" min={0.35} max={2.2} step={0.01} value={selectedSticker.scale} onChange={(event) => onUpdateSticker(selectedSticker.id, { scale: Number(event.target.value) })} />
+              <span>{selectedSticker.scale.toFixed(2)}x</span>
+            </label>
+            <label className="control">
+              <span>Rotation</span>
+              <input type="range" min={-180} max={180} step={1} value={selectedSticker.rotation} onChange={(event) => onUpdateSticker(selectedSticker.id, { rotation: Number(event.target.value) })} />
+              <span>{selectedSticker.rotation.toFixed(0)} deg</span>
+            </label>
+            <label className="control">
+              <span>Gloss</span>
+              <input type="range" min={0} max={1} step={0.01} value={selectedSticker.gloss} onChange={(event) => onUpdateSticker(selectedSticker.id, { gloss: Number(event.target.value) })} />
+              <span>{Math.round(selectedSticker.gloss * 100)}%</span>
+            </label>
+            <button className="remove-btn sticker-remove" type="button" onClick={() => onRemoveSticker(selectedSticker.id)}>Remove sticker</button>
+          </div>
+        )}
       </section>
 
       <section className="drawer-section">
@@ -486,6 +556,9 @@ export default function App() {
   const [activeEquipmentTab, setActiveEquipmentTab] = useState<EquipmentTab>('effects')
   const [debugEnabled, setDebugEnabled] = useState(false)
   const [focusMode, setFocusMode] = useState(false)
+  const [controllerTheme, setControllerTheme] = useState<ControllerThemeId>('default-dark')
+  const [stickers, setStickers] = useState<ControllerSticker[]>([])
+  const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null)
 
   useEffect(() => {
     const unsub = engine.subscribe(setState)
@@ -506,22 +579,23 @@ export default function App() {
 
   const loadFromLibrary = useCallback(async (trackId: string, deckIdx: 0 | 1) => {
     const file = lib.getFileForTrack(trackId)
+    const libraryTrack = lib.getState().tracks.find((track) => track.id === trackId)
     if (!file) return
 
     try {
-      const audioCtx = new AudioContext()
-      const arrayBuffer = await file.arrayBuffer()
-      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer)
-      audioCtx.close()
+      const audioBuffer = await getAudioEngine().decode(file)
 
       engine.dispatch({
         type: 'LOAD_TRACK',
         deck: deckIdx,
         track: {
           id: trackId,
-          name: file.name,
+          name: libraryTrack?.title ?? file.name,
           buffer: audioBuffer,
           duration: audioBuffer.duration,
+          title: libraryTrack?.title ?? file.name,
+          artist: libraryTrack?.artist ?? null,
+          bpm: libraryTrack?.analyzedBpm ?? null,
         },
       })
 
@@ -603,6 +677,40 @@ export default function App() {
     engine.dispatch({ type: 'SEEK', deck, seconds: (percent / 100) * duration })
   }, [engine])
 
+  const handleStickerFile = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : null
+      if (!result) return
+      const sticker = createSticker({
+        id: `sticker-${Date.now()}-${Math.round(Math.random() * 10000)}`,
+        name: file.name.replace(/\.[^.]+$/, ''),
+        imageDataUrl: result,
+        x: 0.5,
+        y: 0.45,
+      })
+      setStickers((current) => [...current, sticker])
+      setSelectedStickerId(sticker.id)
+    }
+    reader.readAsDataURL(file)
+    event.target.value = ''
+  }, [])
+
+  const handleStickerChange = useCallback((sticker: ControllerSticker) => {
+    setStickers((current) => current.map((entry) => entry.id === sticker.id ? sticker : entry))
+  }, [])
+
+  const handleStickerUpdate = useCallback((id: string, patch: Partial<Omit<ControllerSticker, 'id' | 'imageDataUrl'>>) => {
+    setStickers((current) => updateSticker(current, id, patch))
+  }, [])
+
+  const handleStickerRemove = useCallback((id: string) => {
+    setStickers((current) => removeSticker(current, id))
+    setSelectedStickerId((current) => current === id ? null : current)
+  }, [])
+
   const toggleDrawer = useCallback((drawer: Exclude<Drawer, null>) => {
     setActiveDrawer((current) => current === drawer ? null : drawer)
   }, [])
@@ -619,7 +727,8 @@ export default function App() {
 
   return (
     <div className={`studio-app ${focusMode ? 'focus-mode' : ''}`}>
-      <TrackDisplayBar state={state} onSeek={handleSeek} />
+      {state.transportError && <div className="transport-toast" role="alert">{state.transportError}</div>}
+      <TrackDisplayBar state={state} engine={engine} onSeek={handleSeek} />
       <StudioToolbar
         activeDrawer={activeDrawer}
         debugEnabled={debugEnabled}
@@ -634,7 +743,13 @@ export default function App() {
       />
 
       <main className="controller-stage">
-        <ThreeScene interactive={true} engine={engine} library={libraryBridge.current!} showDebug={debugEnabled} />
+        <ThreeScene interactive={true} engine={engine} library={libraryBridge.current!} showDebug={debugEnabled} themeId={controllerTheme} />
+        <StickerLayer
+          stickers={stickers}
+          selectedId={selectedStickerId}
+          onSelect={setSelectedStickerId}
+          onChange={handleStickerChange}
+        />
       </main>
 
       {activeDrawer && <button className="drawer-scrim" aria-label="Close drawer" onClick={() => setActiveDrawer(null)} />}
@@ -680,8 +795,16 @@ export default function App() {
             state={state}
             midiSupported={midiSupported}
             debugEnabled={debugEnabled}
+            themeId={controllerTheme}
+            stickers={stickers}
+            selectedStickerId={selectedStickerId}
             onToggleDebug={() => setDebugEnabled((v) => !v)}
             onMasterChange={(level) => engine.dispatch({ type: 'SET_MASTER', level })}
+            onThemeChange={setControllerTheme}
+            onStickerFile={handleStickerFile}
+            onSelectSticker={setSelectedStickerId}
+            onUpdateSticker={handleStickerUpdate}
+            onRemoveSticker={handleStickerRemove}
           />
         )}
       </aside>

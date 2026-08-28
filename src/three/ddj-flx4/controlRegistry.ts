@@ -29,6 +29,9 @@ export interface RuntimeControl {
   travelMax?: number;
   /** Authored placement retained while applying local fader travel. */
   basePosition?: THREE.Vector3;
+  /** Optional local hit target covering the authored rail, not only the cap. */
+  hitboxCenter?: THREE.Vector3;
+  hitboxSize?: THREE.Vector3;
   /** Authored rotation retained while applying rotary travel. */
   baseRotation?: THREE.Euler;
   // Per-mesh override for lit (emissive) state. Falls back to defaults.
@@ -44,16 +47,75 @@ const POS_INF = Number.POSITIVE_INFINITY;
 const ROTARY_MIN = -2.356194490192345;
 const ROTARY_MAX = 2.356194490192345;
 
-// All faders travel 0.022 m on a local axis (per handoff).
-const FADER_TRAVEL = 0.022;
-const CROSSFADER_TRAVEL = 0.026;
-
 function firstByName(root: THREE.Object3D, name: string): THREE.Object3D | null {
   let found: THREE.Object3D | null = null;
   root.traverse((o) => {
     if (!found && o.name === name) found = o;
   });
   return found;
+}
+
+function boundsInParent(object: THREE.Object3D, parent: THREE.Object3D): THREE.Box3 {
+  object.updateWorldMatrix(true, true);
+  parent.updateWorldMatrix(true, false);
+  const worldBox = new THREE.Box3().setFromObject(object);
+  const corners = [
+    new THREE.Vector3(worldBox.min.x, worldBox.min.y, worldBox.min.z),
+    new THREE.Vector3(worldBox.min.x, worldBox.min.y, worldBox.max.z),
+    new THREE.Vector3(worldBox.min.x, worldBox.max.y, worldBox.min.z),
+    new THREE.Vector3(worldBox.min.x, worldBox.max.y, worldBox.max.z),
+    new THREE.Vector3(worldBox.max.x, worldBox.min.y, worldBox.min.z),
+    new THREE.Vector3(worldBox.max.x, worldBox.min.y, worldBox.max.z),
+    new THREE.Vector3(worldBox.max.x, worldBox.max.y, worldBox.min.z),
+    new THREE.Vector3(worldBox.max.x, worldBox.max.y, worldBox.max.z)
+  ];
+  const result = new THREE.Box3().makeEmpty();
+  for (const corner of corners) result.expandByPoint(parent.worldToLocal(corner));
+  return result;
+}
+
+export interface LinearTravelRange {
+  axis: Axis;
+  min: number;
+  max: number;
+  base: number;
+  capSize: number;
+  hitboxCenter: THREE.Vector3;
+  hitboxSize: THREE.Vector3;
+}
+
+/** Derive handle-center endpoints from the authored rail and cap geometry. */
+export function deriveLinearTravelRange(
+  controlObject: THREE.Object3D,
+  railObject: THREE.Object3D,
+  capObject: THREE.Object3D,
+  axis: Axis
+): LinearTravelRange {
+  const parent = controlObject.parent ?? controlObject;
+  const rail = boundsInParent(railObject, parent);
+  const cap = boundsInParent(capObject, parent);
+  const base = controlObject.position[axis];
+  const capSize = cap.max[axis] - cap.min[axis];
+  const halfCap = capSize / 2;
+  const railMin = rail.min[axis];
+  const railMax = rail.max[axis];
+  const railCenter = rail.getCenter(new THREE.Vector3());
+  const railSize = rail.getSize(new THREE.Vector3());
+  const hitboxCenter = controlObject.worldToLocal(parent.localToWorld(railCenter.clone()));
+  const hitboxSize = new THREE.Vector3(
+    Math.max(railSize.x, cap.getSize(new THREE.Vector3()).x),
+    Math.max(railSize.y * 2, 0.02),
+    Math.max(railSize.z, cap.getSize(new THREE.Vector3()).z)
+  );
+  return {
+    axis,
+    min: railMin + halfCap,
+    max: railMax - halfCap,
+    base,
+    capSize,
+    hitboxCenter,
+    hitboxSize
+  };
 }
 
 function firstDescendantMesh(root: THREE.Object3D): THREE.Mesh | null {
@@ -111,24 +173,34 @@ function makeKnob(id: string, pivotName: string, root: THREE.Object3D, controls:
   );
 }
 
-function makeLinearFader(id: string, faderName: string, root: THREE.Object3D, controls: Record<string, RuntimeControl>, missing: string[]): void {
+function makeLinearFader(id: string, faderName: string, root: THREE.Object3D, controls: Record<string, RuntimeControl>, missing: string[], axis: Axis = "z"): void {
   const fader = firstByName(root, faderName);
   if (!fader) {
     missing.push(id);
     return;
   }
+  const rail = firstByName(fader, `${faderName}Track`) ?? firstByName(fader, `${faderName}Slot`);
+  const handle = firstByName(fader, `${faderName}Handle`);
+  const cap = handle ? firstDescendantMesh(handle) : null;
+  if (!rail || !handle || !cap) {
+    missing.push(id);
+    return;
+  }
+  const range = deriveLinearTravelRange(handle, rail, cap, axis);
   add(
     {
       id,
       kind: "linear",
-      object: fader,
-      axis: "z",
+      object: handle,
+      axis,
       minValue: 0,
       maxValue: 1,
       defaultValue: 0.5,
-      travelMin: 0,
-      travelMax: FADER_TRAVEL,
-      basePosition: fader.position.clone()
+      travelMin: range.min - range.base,
+      travelMax: range.max - range.base,
+      basePosition: handle.position.clone()
+      ,hitboxCenter: range.hitboxCenter
+      ,hitboxSize: range.hitboxSize
     },
     controls,
     missing
@@ -141,18 +213,28 @@ function makeCrossfader(root: THREE.Object3D, controls: Record<string, RuntimeCo
     missing.push(CONTROL_IDS.mixer.crossfader);
     return;
   }
+  const rail = firstByName(fader, "CrossfaderTrack");
+  const handle = firstByName(fader, "CrossfaderHandle");
+  const cap = handle ? firstDescendantMesh(handle) : null;
+  if (!rail || !handle || !cap) {
+    missing.push(CONTROL_IDS.mixer.crossfader);
+    return;
+  }
+  const range = deriveLinearTravelRange(handle, rail, cap, "x");
   add(
     {
       id: CONTROL_IDS.mixer.crossfader,
       kind: "crossfader",
-      object: fader,
+      object: handle,
       axis: "x",
       minValue: -1,
       maxValue: 1,
       defaultValue: 0,
-      travelMin: -CROSSFADER_TRAVEL,
-      travelMax: CROSSFADER_TRAVEL,
-      basePosition: fader.position.clone()
+      travelMin: range.min - range.base,
+      travelMax: range.max - range.base,
+      basePosition: handle.position.clone()
+      ,hitboxCenter: range.hitboxCenter
+      ,hitboxSize: range.hitboxSize
     },
     controls,
     missing

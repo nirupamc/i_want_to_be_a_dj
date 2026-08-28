@@ -30,6 +30,24 @@ function addMesh(parent: THREE.Object3D, name: string): THREE.Mesh {
   return m;
 }
 
+function addLinearFader(parent: THREE.Object3D, name: string, axis: "x" | "z"): void {
+  const rail = new THREE.Mesh(
+    axis === "z" ? new THREE.BoxGeometry(0.01, 0.002, 0.1) : new THREE.BoxGeometry(0.1, 0.002, 0.01),
+    new THREE.MeshBasicMaterial()
+  );
+  rail.name = `${name}Track`;
+  parent.add(rail);
+  const handle = new THREE.Object3D();
+  handle.name = `${name}Handle`;
+  const cap = new THREE.Mesh(
+    axis === "z" ? new THREE.BoxGeometry(0.02, 0.006, 0.012) : new THREE.BoxGeometry(0.012, 0.006, 0.02),
+    new THREE.MeshBasicMaterial()
+  );
+  cap.name = `${name}HandleBody`;
+  handle.add(cap);
+  parent.add(handle);
+}
+
 function buildFakeModel(): THREE.Object3D {
   const root = makeFakeRoot();
   const left = new THREE.Object3D(); left.name = "LeftDeck"; root.add(left);
@@ -41,13 +59,13 @@ function buildFakeModel(): THREE.Object3D {
   addPivot(right, "RightJogWheelPivot");
 
   // Tempo
-  addPivot(left, "LeftTempoFader");
-  addPivot(right, "RightTempoFader");
+  const leftTempo = addPivot(left, "LeftTempoFader"); addLinearFader(leftTempo, "LeftTempoFader", "z");
+  const rightTempo = addPivot(right, "RightTempoFader"); addLinearFader(rightTempo, "RightTempoFader", "z");
 
   // Channel faders + crossfader
-  addPivot(mixer, "ChannelFader1");
-  addPivot(mixer, "ChannelFader2");
-  addPivot(mixer, "Crossfader");
+  const channel1 = addPivot(mixer, "ChannelFader1"); addLinearFader(channel1, "ChannelFader1", "z");
+  const channel2 = addPivot(mixer, "ChannelFader2"); addLinearFader(channel2, "ChannelFader2", "z");
+  const crossfader = addPivot(mixer, "Crossfader"); addLinearFader(crossfader, "Crossfader", "x");
 
   // Knobs
   for (const side of [1, 2]) {
@@ -136,8 +154,8 @@ describe("M12A control registry", () => {
     high.rotation.set(0.1, 0.2, 0.3);
 
     const { controls } = buildControlRegistry(root);
-    expect(controls["mixer.channel1.fader"].basePosition?.z).toBeCloseTo(-0.069);
-    expect(controls["mixer.crossfader"].basePosition?.x).toBeCloseTo(0.004);
+    expect(controls["mixer.channel1.fader"].basePosition?.z).toBeCloseTo(0);
+    expect(controls["mixer.crossfader"].basePosition?.x).toBeCloseTo(0);
     expect(controls["mixer.channel1.eq.high"].baseRotation?.toArray()).toEqual([0.1, 0.2, 0.3, "XYZ"]);
   });
 

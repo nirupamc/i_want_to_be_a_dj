@@ -12,6 +12,9 @@ function buildFakeModel(): THREE.Object3D {
     const deck = new THREE.Object3D(); deck.name = `${side}Deck`; root.add(deck);
     const j = new THREE.Object3D(); j.name = `${side}JogWheelPivot`; deck.add(j);
     const t = new THREE.Object3D(); t.name = `${side}TempoFader`; deck.add(t);
+    const tempoTrack = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.002, 0.1), new THREE.MeshBasicMaterial()); tempoTrack.name = `${side}TempoFaderTrack`; t.add(tempoTrack);
+    const tempoHandle = new THREE.Object3D(); tempoHandle.name = `${side}TempoFaderHandle`; t.add(tempoHandle);
+    const tempoCap = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.006, 0.012), new THREE.MeshBasicMaterial()); tempoCap.name = `${side}TempoFaderHandleBody`; tempoHandle.add(tempoCap);
     for (let i = 1; i <= 8; i++) {
       const p = new THREE.Object3D(); p.name = `${side}Pad${String(i).padStart(2, "0")}`; deck.add(p);
       const pm = new THREE.Object3D(); pm.name = `${side}Pad${String(i).padStart(2, "0")}Mesh`; p.add(pm);
@@ -25,6 +28,12 @@ function buildFakeModel(): THREE.Object3D {
   const mixer = new THREE.Object3D(); mixer.name = "Mixer"; root.add(mixer);
   for (const name of ["ChannelFader1", "ChannelFader2", "Crossfader", "BrowseEncoderPivot"]) {
     const p = new THREE.Object3D(); p.name = name; mixer.add(p);
+    if (name !== "BrowseEncoderPivot") {
+      const cross = name === "Crossfader";
+      const track = new THREE.Mesh(cross ? new THREE.BoxGeometry(0.1, 0.002, 0.01) : new THREE.BoxGeometry(0.01, 0.002, 0.1), new THREE.MeshBasicMaterial()); track.name = `${name}Track`; p.add(track);
+      const handle = new THREE.Object3D(); handle.name = `${name}Handle`; p.add(handle);
+      const cap = new THREE.Mesh(cross ? new THREE.BoxGeometry(0.012, 0.006, 0.02) : new THREE.BoxGeometry(0.02, 0.006, 0.012), new THREE.MeshBasicMaterial()); cap.name = `${name}HandleBody`; handle.add(cap);
+    }
   }
   for (const knob of ["Trim", "High", "Mid", "Low", "CFX"]) {
     for (const ch of [1, 2]) {
@@ -79,21 +88,21 @@ describe("M12B state sync", () => {
     engine.dispatch({ type: "SET_TEMPO", deck: 0, percent: 8 }); // 50% of 16 → normalized 0.75
     stateSync.applyState(engine.getState());
     const c = controls["deck.left.tempo"];
-    // travel = 0.022, position.z = 0.75 * 0.022 = 0.0165
-    expect(c.object.position.z).toBeCloseTo(0.75 * 0.022, 5);
+    // Fake rail is 0.1 with a 0.012 cap, so usable travel is +/-0.044.
+    expect(c.object.position.z).toBeCloseTo(0.75 * 0.088 - 0.044, 5);
   });
 
   it("Channel fader visual position reflects engine state", () => {
     engine.dispatch({ type: "SET_CHANNEL_FADER", deck: 0, fader: 0.8 });
     stateSync.applyState(engine.getState());
-    expect(controls["mixer.channel1.fader"].object.position.z).toBeCloseTo(0.8 * 0.022, 5);
+    expect(controls["mixer.channel1.fader"].object.position.z).toBeCloseTo(0.8 * 0.088 - 0.044, 5);
   });
 
   it("Crossfader visual X reflects engine state", () => {
     engine.dispatch({ type: "SET_CROSSFADER", x: 0.25 });
     stateSync.applyState(engine.getState());
     // 3D X = engine X * 2 - 1 = -0.5
-    expect(controls["mixer.crossfader"].object.position.x).toBeCloseTo(-0.5 * 0.026, 5);
+    expect(controls["mixer.crossfader"].object.position.x).toBeCloseTo(-0.022, 5);
   });
 
   it("Tempo/loop/play control IDs exist", () => {

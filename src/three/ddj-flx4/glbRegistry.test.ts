@@ -39,7 +39,9 @@ function readGlbJson(filePath: string): GlbJson {
 function buildObjectTree(json: GlbJson): THREE.Object3D {
   const nodes = json.nodes ?? []
   const objects = nodes.map((node) => {
-    const object = new THREE.Object3D()
+    const object = /Track$|HandleBody$|HandleRidge$/.test(node.name ?? '')
+      ? new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.005, 0.01), new THREE.MeshBasicMaterial())
+      : new THREE.Object3D()
     object.name = node.name ?? ''
     return object
   })

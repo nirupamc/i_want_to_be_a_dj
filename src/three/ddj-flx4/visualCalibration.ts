@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { getControllerTheme, type ControllerThemeId } from '../../customization/controllerCustomization'
 
 export type ControllerMaterialRole =
   | 'chassis'
@@ -15,6 +16,42 @@ export type ControllerMaterialRole =
   | 'metal-accent'
 
 type ColorMaterial = THREE.Material & { color?: THREE.Color; emissive?: THREE.Color; emissiveIntensity?: number; roughness?: number; metalness?: number }
+
+export interface MaterialCalibrationAudit {
+  material: string
+  role: ControllerMaterialRole
+  meshCount: number
+  assignedMeshCount: number
+  calibrated: boolean
+  originalColor: number[] | null
+  finalColor: number[] | null
+  originalRoughness: number | null
+  finalRoughness: number | null
+  originalMetalness: number | null
+  finalMetalness: number | null
+}
+
+export interface MaterialCalibrationResult {
+  materialCount: number
+  classifiedMaterialCount: number
+  roleCounts: Record<ControllerMaterialRole, number>
+  audit: MaterialCalibrationAudit[]
+}
+
+export interface VisibleMaterialAudit {
+  object: string
+  material: string
+  uuid: string
+  color: number[] | null
+  roughness: number | null
+  metalness: number | null
+  map: boolean
+  mapUuid: string | null
+  mapDimensions: { width: number; height: number } | null
+  emissive: number[] | null
+  opacity: number
+  transparent: boolean
+}
 
 function roleForName(name: string): ControllerMaterialRole {
   const value = name.toLowerCase()
@@ -40,30 +77,111 @@ function prepareTextureColorSpaces(material: THREE.Material): void {
   }
 }
 
-function tuneMaterial(material: ColorMaterial, role: ControllerMaterialRole): void {
+function describeMaterial(object: THREE.Object3D): VisibleMaterialAudit[] {
+  if (!(object as THREE.Mesh).isMesh) return []
+  const mesh = object as THREE.Mesh
+  const entries = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+  return entries.map((material) => {
+    const typed = material as ColorMaterial & { map?: THREE.Texture | null }
+    const image = typed.map?.image as { width?: number; height?: number } | undefined
+    return {
+      object: mesh.name,
+      material: material.name || material.type,
+      uuid: material.uuid,
+      color: typed.color?.toArray() ?? null,
+      roughness: typed.roughness ?? null,
+      metalness: typed.metalness ?? null,
+      map: !!typed.map,
+      mapUuid: typed.map?.uuid ?? null,
+      mapDimensions: image?.width && image?.height ? { width: image.width, height: image.height } : null,
+      emissive: typed.emissive?.toArray() ?? null,
+      opacity: material.opacity,
+      transparent: material.transparent
+    }
+  })
+}
+
+export function auditVisibleMaterials(root: THREE.Object3D, names: string[]): VisibleMaterialAudit[] {
+  const result: VisibleMaterialAudit[] = []
+  for (const name of names) {
+    const object = root.getObjectByName(name)
+    if (object) result.push(...describeMaterial(object))
+  }
+  return result
+}
+
+/** Dev-only probe used to prove whether a visible mesh is material-bound. */
+export function applyForcedMaterialProbe(root: THREE.Object3D): void {
+  const names = ['Trim1TopCap', 'Trim1OrientationMarker', 'ChannelFader1HandleBody', 'LeftJogWheelOuterRim', 'Trim1PanelLabel']
+  const material = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.4, metalness: 0.1 })
+  for (const name of names) {
+    const object = root.getObjectByName(name)
+    if (!(object as THREE.Mesh | undefined)?.isMesh) continue
+    ;(object as THREE.Mesh).material = material.clone()
+  }
+  material.dispose()
+}
+
+function tuneMaterial(material: ColorMaterial, role: ControllerMaterialRole, themeId: ControllerThemeId): void {
+  const theme = getControllerTheme(themeId)
+  const accent = new THREE.Color(theme.accent)
   if (material.color) {
-    if (role === 'panel-label' || role === 'button-label' || role === 'knob-indicator' || role === 'fader-rail') {
-      material.color.lerp(new THREE.Color(0xd7dce3), role === 'fader-rail' ? 0.72 : 0.48)
-    } else if (role === 'fader-cap' || role === 'jog-ring' || role === 'metal-accent') {
-      material.color.lerp(new THREE.Color(0xaeb5bf), role === 'fader-cap' ? 0.72 : 0.62)
-    } else if (role === 'knob-body' || role === 'button-body' || role === 'pad') {
-      material.color.lerp(new THREE.Color(0x9da5af), role === 'knob-body' ? 0.78 : 0.58)
+    // These are deliberate role anchors, not multipliers on the authored near-black
+    // values. The GLB uses very dark albedos, so a lerp leaves the control surfaces
+    // below a usable contrast threshold even when the calibration is assigned.
+    if (role === 'panel-label' || role === 'button-label' || role === 'knob-indicator') {
+      material.color.setHex(role === 'knob-indicator' ? 0xf0f4fa : 0xd6dee8)
+    } else if (role === 'fader-rail') {
+      material.color.setHex(themeId === 'glossy-black' ? 0x9aa7b5 : 0x8895a4)
+    } else if (role === 'fader-cap') {
+      material.color.setHex(themeId === 'accent-neon' ? 0xbfc8d4 : 0xc8d0da)
+    } else if (role === 'jog-ring') {
+      material.color.setHex(material.name.toLowerCase().includes('inner') ? 0x9daab8 : 0x748394)
+    } else if (role === 'metal-accent') {
+      material.color.copy(accent).lerp(new THREE.Color(0x6f7f90), themeId === 'accent-neon' ? 0.25 : 0.75)
+    } else if (role === 'knob-body') {
+      material.color.setHex(material.name.toLowerCase().includes('knobtop') ? 0xb8c2ce : 0x788798)
+    } else if (role === 'button-body') {
+      material.color.setHex(themeId === 'glossy-black' ? 0x5d6874 : 0x566576)
+    } else if (role === 'pad') {
+      material.color.copy(themeId === 'accent-neon' ? accent : new THREE.Color(0x4a5d72)).lerp(new THREE.Color(0x243142), 0.5)
+    } else if (role === 'chassis') {
+      material.color.setHex(themeId === 'glossy-black' ? 0x111820 : 0x151b22)
     }
   }
+  const textured = material as ColorMaterial & { map?: THREE.Texture | null; toneMapped?: boolean }
+  if (role === 'knob-indicator') {
+    // Orientation markers are separate geometry. Removing the dark label atlas
+    // makes the pointer a stable, readable neutral mark at every knob angle.
+    textured.map = null
+  }
   if (material.roughness !== undefined) {
-    if (role === 'fader-cap' || role === 'jog-ring' || role === 'metal-accent') material.roughness = Math.min(material.roughness, 0.62)
+    if (role === 'fader-cap' || role === 'jog-ring' || role === 'metal-accent') material.roughness = Math.min(material.roughness, 0.48 - theme.gloss * 0.18)
+    if (role === 'button-body' || role === 'knob-body' || role === 'pad') material.roughness = Math.min(material.roughness, 0.62 - theme.gloss * 0.18)
     if (role === 'panel-label' || role === 'button-label' || role === 'knob-indicator') material.roughness = Math.min(material.roughness, 0.7)
   }
+  if (material.metalness !== undefined && (role === 'jog-ring' || role === 'fader-cap' || role === 'knob-body' || role === 'metal-accent')) {
+    material.metalness = Math.max(material.metalness, 0.12 + theme.gloss * 0.22)
+  }
   if (material.emissive && (role === 'panel-label' || role === 'button-label' || role === 'knob-indicator')) {
-    material.emissive.lerp(new THREE.Color(0x313841), 0.18)
-    if (material.emissiveIntensity !== undefined) material.emissiveIntensity = Math.min(Math.max(material.emissiveIntensity, 0.08), 0.18)
+    material.emissive.setHex(role === 'knob-indicator' ? 0x343b44 : 0x7b8796)
+    if (material.emissiveIntensity !== undefined) material.emissiveIntensity = role === 'knob-indicator' ? 0.18 : 0.68
+    if (role === 'panel-label' || role === 'button-label') textured.toneMapped = false
+  }
+  if (material.emissive && (role === 'knob-body' || role === 'fader-cap' || role === 'fader-rail' || role === 'jog-ring' || role === 'button-body' || role === 'pad')) {
+    material.emissive.copy(role === 'pad' && themeId === 'accent-neon' ? accent : new THREE.Color(role === 'pad' ? 0x2e4154 : 0x435363))
+    if (material.emissiveIntensity !== undefined) {
+      material.emissiveIntensity = role === 'jog-ring' ? 0.28 : role === 'button-body' ? 0.3 : 0.34
+    }
   }
 }
 
-export function calibrateControllerMaterials(root: THREE.Object3D): { materialCount: number; roleCounts: Record<ControllerMaterialRole, number> } {
+export function calibrateControllerMaterials(root: THREE.Object3D, enabled = true, themeId: ControllerThemeId = 'default-dark'): MaterialCalibrationResult {
   const materialRoles = new Map<string, THREE.Material>()
+  const auditByKey = new Map<string, MaterialCalibrationAudit>()
   const roleCounts = {} as Record<ControllerMaterialRole, number>
   const materials = new Set<THREE.Material>()
+  const classifiedMaterials = new Set<THREE.Material>()
 
   root.traverse((object) => {
     if (!(object as THREE.Mesh).isMesh) return
@@ -73,18 +191,48 @@ export function calibrateControllerMaterials(root: THREE.Object3D): { materialCo
     const sourceMaterials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
     const tunedMaterials = sourceMaterials.map((source) => {
       materials.add(source)
+      classifiedMaterials.add(source)
       prepareTextureColorSpaces(source)
       const key = `${source.uuid}:${role}`
+      const sourceColor = (source as ColorMaterial).color?.toArray() ?? null
+      let audit = auditByKey.get(key)
+      if (!audit) {
+        audit = {
+          material: source.name || source.type,
+          role,
+          meshCount: 0,
+          assignedMeshCount: 0,
+          calibrated: enabled,
+          originalColor: sourceColor,
+          finalColor: sourceColor,
+          originalRoughness: (source as ColorMaterial).roughness ?? null,
+          finalRoughness: (source as ColorMaterial).roughness ?? null,
+          originalMetalness: (source as ColorMaterial).metalness ?? null,
+          finalMetalness: (source as ColorMaterial).metalness ?? null
+        }
+        auditByKey.set(key, audit)
+      }
+      audit.meshCount += 1
       let tuned = materialRoles.get(key)
       if (!tuned) {
-        tuned = source.clone()
-        tuneMaterial(tuned as ColorMaterial, role)
+        tuned = enabled ? source.clone() : source
+        if (enabled) tuneMaterial(tuned as ColorMaterial, role, themeId)
         materialRoles.set(key, tuned)
+        const finalMaterial = tuned as ColorMaterial
+        audit.finalColor = finalMaterial.color?.toArray() ?? null
+        audit.finalRoughness = finalMaterial.roughness ?? null
+        audit.finalMetalness = finalMaterial.metalness ?? null
       }
+      if (enabled && tuned !== source) audit.assignedMeshCount += 1
       return tuned
     })
     mesh.material = Array.isArray(mesh.material) ? tunedMaterials : tunedMaterials[0]
   })
 
-  return { materialCount: materials.size, roleCounts }
+  return {
+    materialCount: materials.size,
+    classifiedMaterialCount: classifiedMaterials.size,
+    roleCounts,
+    audit: [...auditByKey.values()]
+  }
 }

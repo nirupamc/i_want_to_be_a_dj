@@ -2,6 +2,7 @@ import React, { useRef, useCallback } from 'react'
 import type { DeckState, Action, PadMode, WaveformData, DJEngineHandle } from '../types'
 import { JogWheel } from './JogWheel'
 import { WaveformDisplay } from './WaveformDisplay'
+import { getAudioEngine } from '../audio'
 
 const BEAT_LOOP_LABELS = ['1/4', '1/2', '1', '2', '4', '8', '16', '32']
 const BEAT_JUMP_LABELS = ['-1', '+1', '-2', '+2', '-4', '+4', '-8', '+8']
@@ -27,10 +28,7 @@ export function Deck({ deck, waveformData, onAction, engine: _engine }: DeckProp
       const reader = new FileReader()
       reader.onload = async () => {
         try {
-          const ctx = new AudioContext()
-          const arrayBuffer = await file.arrayBuffer()
-          const audioBuffer = await ctx.decodeAudioData(arrayBuffer)
-          ctx.close()
+          const audioBuffer = await getAudioEngine().decode(file)
           onAction({
             type: 'LOAD_TRACK', deck: deck.id,
             track: { id: `${file.name}-${file.size}-${file.lastModified}`, name: file.name, buffer: audioBuffer, duration: audioBuffer.duration },
@@ -95,6 +93,7 @@ export function Deck({ deck, waveformData, onAction, engine: _engine }: DeckProp
         waveformData={waveformData}
         position={deck.position}
         duration={deck.duration}
+        beatGrid={deck.analysis.beatGrid}
         loop={deck.loop}
         hotCues={deck.hotCues}
         onClick={(pos) => {

@@ -34,6 +34,12 @@ export interface AudioEngine {
   getDeckOutput(deck: 0 | 1): AudioNode
   /** Get the master gain node (for FX routing) */
   getMasterInput(): GainNode
+  getRoutingSnapshot(deck: 0 | 1): {
+    trimGain: number
+    channelGain: number
+    crossfadeGain: number
+    masterGain: number
+  }
   destroy(): void
 }
 
@@ -57,6 +63,7 @@ export class AudioEngineImpl implements AudioEngine {
 
   async ensureRunning(): Promise<void> {
     if (this.ctx && this.running) return
+    const before = this.ctx?.state ?? 'none'
     if (!this.ctx) {
       this.ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)()
       this._buildGraph()
@@ -64,7 +71,10 @@ export class AudioEngineImpl implements AudioEngine {
     if (this.ctx.state === 'suspended') {
       await this.ctx.resume()
     }
-    this.running = true
+    this.running = this.ctx.state === 'running'
+    if (!this.running) {
+      throw new Error(`AudioContext is ${this.ctx.state}; resume from ${before} did not start audio`)
+    }
   }
 
   private _buildGraph(): void {
@@ -244,6 +254,15 @@ export class AudioEngineImpl implements AudioEngine {
 
   getMasterInput(): GainNode {
     return this.masterGain!
+  }
+
+  getRoutingSnapshot(deck: 0 | 1): { trimGain: number; channelGain: number; crossfadeGain: number; masterGain: number } {
+    return {
+      trimGain: this.trimGains[deck]?.gain.value ?? 0,
+      channelGain: this.channelGains[deck]?.gain.value ?? 0,
+      crossfadeGain: this.crossfadeGains[deck]?.gain.value ?? 0,
+      masterGain: this.masterGain?.gain.value ?? 0,
+    }
   }
 
   destroy(): void {
