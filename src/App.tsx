@@ -27,20 +27,28 @@ const FX_TARGETS = ['A', 'B', 'MASTER'] as const
 
 type Drawer = 'library' | 'equipment' | 'settings' | null
 type EquipmentTab = 'effects' | 'sampler' | 'midi'
+type SettingsTab = 'audio' | 'appearance' | 'customization' | 'midi' | 'developer'
 
 function DeckTrackDisplay({ deck, side }: { deck: DeckState; side: 'left' | 'right' }) {
+  const playState = deck.isPlaying ? 'Playing' : deck.isPaused ? 'Paused' : 'Stopped'
+
   return (
     <section className={`track-display deck-${side}`}>
-      <div className="track-deck-label">Deck {deck.id === 0 ? 'A' : 'B'}</div>
+      <div className="track-display-topline">
+        <span className="track-deck-label">Deck {deck.id === 0 ? 'A' : 'B'}</span>
+        <span className={`track-state ${deck.isPlaying ? 'playing' : ''}`}>{playState}</span>
+      </div>
       <div className="track-title" title={deck.track?.name ?? 'No track loaded'}>
         {deck.track?.title ?? deck.track?.name ?? 'No track loaded'}
       </div>
-      {deck.track?.artist && <div className="track-artist">{deck.track.artist}</div>}
+      <div className="track-artist">{deck.track?.artist ?? 'Unknown artist'}</div>
       <div className="track-meta">
         <span className="bpm-badge">{resolveDeckBpmLabel(deck)} BPM</span>
-        <span className="time-pair">{formatTime(deck.position)} / {formatRemaining(deck.position, deck.duration)}</span>
+        <span className="time-pair">
+          <span>{formatTime(deck.position)}</span>
+          <span>{formatRemaining(deck.position, deck.duration)}</span>
+        </span>
       </div>
-      <div className={`deck-transport-dot ${deck.isPlaying ? 'playing' : ''}`} />
     </section>
   )
 }
@@ -84,26 +92,18 @@ function TrackDisplayBar({ state, engine, onSeek }: { state: DJState; engine: DJ
 
 function StudioToolbar({
   activeDrawer,
-  debugEnabled,
   focusMode,
   trackCount,
-  shiftPressed,
+  midiEnabled,
   onToggleDrawer,
-  onToggleDebug,
   onToggleFocus,
-  onShiftDown,
-  onShiftUp,
 }: {
   activeDrawer: Drawer
-  debugEnabled: boolean
   focusMode: boolean
   trackCount: number
-  shiftPressed: boolean
+  midiEnabled: boolean
   onToggleDrawer: (drawer: Exclude<Drawer, null>) => void
-  onToggleDebug: () => void
   onToggleFocus: () => void
-  onShiftDown: () => void
-  onShiftUp: () => void
 }) {
   return (
     <nav className="studio-toolbar" aria-label="Studio navigation">
@@ -120,19 +120,9 @@ function StudioToolbar({
       </div>
       <div className="toolbar-right">
         <span className="toolbar-count">{trackCount} tracks</span>
-        <button className={`toolbar-button compact ${focusMode ? 'active' : ''}`} onClick={onToggleFocus}>
-          Focus
-        </button>
-        <button className={`toolbar-button compact ${debugEnabled ? 'active' : ''}`} onClick={onToggleDebug}>
-          Debug
-        </button>
-        <button
-          className={`toolbar-button compact shift ${shiftPressed ? 'active' : ''}`}
-          onPointerDown={onShiftDown}
-          onPointerUp={onShiftUp}
-          onPointerCancel={onShiftUp}
-        >
-          Shift
+        <span className={`toolbar-midi ${midiEnabled ? 'active' : ''}`}>MIDI {midiEnabled ? 'on' : 'off'}</span>
+        <button className={`toolbar-icon-button ${focusMode ? 'active' : ''}`} onClick={onToggleFocus} aria-label="Toggle focus view" title="Toggle focus view">
+          <span aria-hidden="true" />
         </button>
       </div>
     </nav>
@@ -176,7 +166,7 @@ function LibraryPanel({
         libRef.current?.setSortField(field)
         onRefresh()
       }}>
-        {label} {isActive ? (library.sortDirection === 'asc' ? '^' : 'v') : ''}
+        {label} {isActive ? (library.sortDirection === 'asc' ? 'up' : 'down') : ''}
       </th>
     )
   }, [library.sortField, library.sortDirection, libRef, onRefresh])
@@ -233,8 +223,8 @@ function LibraryPanel({
                 {sortHeader('artist', 'ARTIST')}
                 {sortHeader('bpm', 'BPM')}
                 {sortHeader('duration', 'DURATION')}
-                <th>STATUS</th>
-                <th>LOADED</th>
+                <th>Status</th>
+                <th>Loaded</th>
                 <th>ACTIONS</th>
               </tr>
             </thead>
@@ -257,16 +247,16 @@ function LibraryPanel({
                     <td className="col-bpm">{track.analyzedBpm?.toFixed(1) ?? '-'}</td>
                     <td className="col-duration">{track.durationSeconds != null ? formatTime(track.durationSeconds) : '-'}</td>
                     <td className={`col-status status-${track.analysisStatus}`}>
-                      {track.analysisStatus === 'ready' ? 'ok' : track.analysisStatus === 'analyzing' ? '...' : track.analysisStatus === 'failed' ? 'x' : '-'}
+                      {track.analysisStatus === 'ready' ? 'Ready' : track.analysisStatus === 'analyzing' ? 'Analyzing' : track.analysisStatus === 'failed' ? 'Failed' : 'Idle'}
                     </td>
                     <td className="col-loaded">
                       {inA && <span className="loaded-badge deck-a">A</span>}
                       {inB && <span className="loaded-badge deck-b">B</span>}
                     </td>
                     <td className="col-actions">
-                      <button className="load-a-btn" onClick={(e) => { e.stopPropagation(); onLoadA(track.id) }} title="Load to Deck A">A</button>
-                      <button className="load-b-btn" onClick={(e) => { e.stopPropagation(); onLoadB(track.id) }} title="Load to Deck B">B</button>
-                      <button className="remove-btn" onClick={(e) => { e.stopPropagation(); onRemove(track.id) }} title="Remove from library">x</button>
+                      <button className="load-a-btn" onClick={(e) => { e.stopPropagation(); onLoadA(track.id) }} title="Load to Deck A">Load A</button>
+                      <button className="load-b-btn" onClick={(e) => { e.stopPropagation(); onLoadB(track.id) }} title="Load to Deck B">Load B</button>
+                      <button className="remove-btn" onClick={(e) => { e.stopPropagation(); onRemove(track.id) }} title="Remove from library">Remove</button>
                     </td>
                   </tr>
                 )
@@ -448,6 +438,7 @@ function SettingsPanel({
   themeId,
   stickers,
   selectedStickerId,
+  activeTab,
   onToggleDebug,
   onMasterChange,
   onThemeChange,
@@ -455,6 +446,7 @@ function SettingsPanel({
   onSelectSticker,
   onUpdateSticker,
   onRemoveSticker,
+  onSetActiveTab,
 }: {
   state: DJState
   midiSupported: boolean
@@ -462,6 +454,7 @@ function SettingsPanel({
   themeId: ControllerThemeId
   stickers: ControllerSticker[]
   selectedStickerId: string | null
+  activeTab: SettingsTab
   onToggleDebug: () => void
   onMasterChange: (level: number) => void
   onThemeChange: (theme: ControllerThemeId) => void
@@ -469,28 +462,32 @@ function SettingsPanel({
   onSelectSticker: (id: string | null) => void
   onUpdateSticker: (id: string, patch: Partial<Omit<ControllerSticker, 'id' | 'imageDataUrl'>>) => void
   onRemoveSticker: (id: string) => void
+  onSetActiveTab: (tab: SettingsTab) => void
 }) {
   const stickerFileRef = useRef<HTMLInputElement>(null)
   const selectedSticker = stickers.find((sticker) => sticker.id === selectedStickerId) ?? null
 
   return (
     <div className="settings-panel">
-      <section className="drawer-section">
+      <div className="drawer-tabs settings-tabs" role="tablist" aria-label="Settings">
+        {(['audio', 'appearance', 'customization', 'midi', 'developer'] as const).map((tab) => (
+          <button key={tab} className={`drawer-tab ${activeTab === tab ? 'active' : ''}`} onClick={() => onSetActiveTab(tab)}>
+            {tab === 'midi' ? 'MIDI' : tab[0].toUpperCase() + tab.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'audio' && <section className="drawer-section">
         <h2>Audio</h2>
         <label className="control">
           <span>Master</span>
           <input type="range" min={0} max={1} step={0.01} value={state.master.level} onChange={(e) => onMasterChange(Number(e.target.value))} />
           <span>{(state.master.level * 100).toFixed(0)}%</span>
         </label>
-      </section>
+      </section>}
 
-      <section className="drawer-section">
-        <h2>Preferences</h2>
-        <div className="settings-note">MIDI support: {midiSupported ? 'available' : 'unavailable in this browser'}</div>
-      </section>
-
-      <section className="drawer-section customization-section">
-        <h2>Controller</h2>
+      {activeTab === 'appearance' && <section className="drawer-section customization-section">
+        <h2>Appearance</h2>
         <div className="theme-options" role="group" aria-label="Controller theme">
           {CONTROLLER_THEMES.map((theme) => (
             <button
@@ -499,11 +496,15 @@ function SettingsPanel({
               onClick={() => onThemeChange(theme.id)}
               type="button"
             >
-              <span className="theme-swatch" style={{ background: theme.accent }} />
+              <span className="theme-preview" style={{ '--theme-accent': theme.accent } as React.CSSProperties} />
               <span>{theme.label}</span>
             </button>
           ))}
         </div>
+      </section>}
+
+      {activeTab === 'customization' && <section className="drawer-section customization-section">
+        <h2>Customization</h2>
         <div className="sticker-controls">
           <button className="import-btn" type="button" onClick={() => stickerFileRef.current?.click()}>Add sticker</button>
           <input ref={stickerFileRef} type="file" accept="image/*" hidden onChange={onStickerFile} />
@@ -534,14 +535,19 @@ function SettingsPanel({
             <button className="remove-btn sticker-remove" type="button" onClick={() => onRemoveSticker(selectedSticker.id)}>Remove sticker</button>
           </div>
         )}
-      </section>
+      </section>}
 
-      <section className="drawer-section">
+      {activeTab === 'midi' && <section className="drawer-section">
+        <h2>MIDI</h2>
+        <div className="settings-note">Web MIDI is {midiSupported ? 'available' : 'unavailable in this browser'}.</div>
+      </section>}
+
+      {activeTab === 'developer' && <section className="drawer-section">
         <h2>Developer</h2>
         <button className={`toolbar-button ${debugEnabled ? 'active' : ''}`} onClick={onToggleDebug}>
           {debugEnabled ? 'Hide debug overlay' : 'Show debug overlay'}
         </button>
-      </section>
+      </section>}
     </div>
   )
 }
@@ -554,6 +560,7 @@ export default function App() {
   const [state, setState] = useState<DJState>(engine.getState())
   const [activeDrawer, setActiveDrawer] = useState<Drawer>(null)
   const [activeEquipmentTab, setActiveEquipmentTab] = useState<EquipmentTab>('effects')
+  const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>('audio')
   const [debugEnabled, setDebugEnabled] = useState(false)
   const [focusMode, setFocusMode] = useState(false)
   const [controllerTheme, setControllerTheme] = useState<ControllerThemeId>('default-dark')
@@ -731,15 +738,11 @@ export default function App() {
       <TrackDisplayBar state={state} engine={engine} onSeek={handleSeek} />
       <StudioToolbar
         activeDrawer={activeDrawer}
-        debugEnabled={debugEnabled}
         focusMode={focusMode}
         trackCount={libState.tracks.length}
-        shiftPressed={state.shiftPressed}
+        midiEnabled={midiEnabled}
         onToggleDrawer={toggleDrawer}
-        onToggleDebug={() => setDebugEnabled((v) => !v)}
         onToggleFocus={() => setFocusMode((v) => !v)}
-        onShiftDown={() => engine.dispatch({ type: 'SHIFT_DOWN' })}
-        onShiftUp={() => engine.dispatch({ type: 'SHIFT_UP' })}
       />
 
       <main className="controller-stage">
@@ -798,6 +801,7 @@ export default function App() {
             themeId={controllerTheme}
             stickers={stickers}
             selectedStickerId={selectedStickerId}
+            activeTab={activeSettingsTab}
             onToggleDebug={() => setDebugEnabled((v) => !v)}
             onMasterChange={(level) => engine.dispatch({ type: 'SET_MASTER', level })}
             onThemeChange={setControllerTheme}
@@ -805,6 +809,7 @@ export default function App() {
             onSelectSticker={setSelectedStickerId}
             onUpdateSticker={handleStickerUpdate}
             onRemoveSticker={handleStickerRemove}
+            onSetActiveTab={setActiveSettingsTab}
           />
         )}
       </aside>

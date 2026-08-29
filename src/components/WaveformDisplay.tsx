@@ -28,11 +28,11 @@ export function WaveformDisplay({ waveformData, position, duration, beatGrid, lo
     ctx.clearRect(0, 0, w, h)
 
     if (!waveformData || waveformData.peaks.length === 0) {
-      ctx.fillStyle = '#20242c'
+      ctx.fillStyle = '#2a2f38'
       ctx.fillRect(0, h / 2 - 1, w, 2)
       if (!compact) {
-        ctx.fillStyle = '#646a75'
-        ctx.font = '12px monospace'
+        ctx.fillStyle = '#737985'
+        ctx.font = '12px system-ui'
         ctx.textAlign = 'center'
         ctx.fillText('No track loaded', w / 2, h / 2 - 6)
         ctx.textAlign = 'start'
@@ -45,8 +45,8 @@ export function WaveformDisplay({ waveformData, position, duration, beatGrid, lo
     const barWidth = Math.max(1, w / peaks.length)
     for (let i = 0; i < peaks.length; i++) {
       const x = (i / peaks.length) * w
-      const peakH = peaks[i] * h * 0.8
-      ctx.fillStyle = x <= posX ? '#8fd0ff' : '#2f83d8'
+      const peakH = Math.max(1, peaks[i] * h * 0.88)
+      ctx.fillStyle = x <= posX ? '#f2c27b' : '#58a9ff'
       ctx.fillRect(x, (h - peakH) / 2, barWidth, peakH)
     }
 
@@ -55,7 +55,7 @@ export function WaveformDisplay({ waveformData, position, duration, beatGrid, lo
         const beat = beatGrid.beats[i]
         if (beat < 0 || beat > duration) continue
         const x = (beat / duration) * w
-        ctx.strokeStyle = i % 4 === 0 ? 'rgba(255, 255, 255, 0.42)' : 'rgba(255, 255, 255, 0.18)'
+        ctx.strokeStyle = i % 4 === 0 ? 'rgba(255, 236, 205, 0.52)' : 'rgba(255, 255, 255, 0.16)'
         ctx.lineWidth = i % 4 === 0 ? 1.5 : 1
         ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke()
       }
@@ -65,12 +65,12 @@ export function WaveformDisplay({ waveformData, position, duration, beatGrid, lo
     if (loop?.active && loop.startSeconds !== null && loop.endSeconds !== null && duration > 0) {
       const lsx = (loop.startSeconds / duration) * w
       const lex = (loop.endSeconds / duration) * w
-      ctx.fillStyle = 'rgba(0, 255, 100, 0.15)'
+      ctx.fillStyle = 'rgba(53, 212, 135, 0.16)'
       ctx.fillRect(lsx, 0, lex - lsx, h)
-      ctx.strokeStyle = '#00ff64'; ctx.lineWidth = 2
+      ctx.strokeStyle = '#35d487'; ctx.lineWidth = 2
       ctx.beginPath(); ctx.moveTo(lsx, 0); ctx.lineTo(lsx, h); ctx.stroke()
       ctx.beginPath(); ctx.moveTo(lex, 0); ctx.lineTo(lex, h); ctx.stroke()
-      ctx.fillStyle = '#00ff64'; ctx.font = '10px monospace'; ctx.fillText('LOOP', lsx + 2, 12)
+      ctx.fillStyle = '#bfffe0'; ctx.font = '10px system-ui'; ctx.fillText('LOOP', lsx + 2, 12)
     }
 
     // Hot cue markers
@@ -89,9 +89,9 @@ export function WaveformDisplay({ waveformData, position, duration, beatGrid, lo
 
     // Position indicator
     if (duration > 0) {
-      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2
-      ctx.shadowColor = 'rgba(255, 74, 74, 0.85)'
-      ctx.shadowBlur = 6
+      ctx.strokeStyle = '#fff7e6'; ctx.lineWidth = 2
+      ctx.shadowColor = 'rgba(246, 163, 58, 0.9)'
+      ctx.shadowBlur = 8
       ctx.beginPath(); ctx.moveTo(posX, 0); ctx.lineTo(posX, h); ctx.stroke()
       ctx.shadowBlur = 0
     }
@@ -106,7 +106,7 @@ export function WaveformDisplay({ waveformData, position, duration, beatGrid, lo
     ctx.clearRect(0, 0, w, h)
 
     if (!waveformData || waveformData.peaks.length === 0 || duration <= 0) {
-      ctx.fillStyle = '#20242c'
+      ctx.fillStyle = '#2a2f38'
       ctx.fillRect(0, h / 2 - 1, w, 2)
       return
     }
@@ -123,8 +123,8 @@ export function WaveformDisplay({ waveformData, position, duration, beatGrid, lo
     const barWidth = Math.max(1, w / visiblePeaks.length)
     for (let i = 0; i < visiblePeaks.length; i++) {
       const x = (i / visiblePeaks.length) * w
-      const peakH = visiblePeaks[i] * h * 0.8
-      ctx.fillStyle = i < visiblePeaks.length / 2 ? '#8fd0ff' : '#2f83d8'
+      const peakH = Math.max(1, visiblePeaks[i] * h * 0.9)
+      ctx.fillStyle = i < visiblePeaks.length / 2 ? '#f2c27b' : '#58a9ff'
       ctx.fillRect(x, (h - peakH) / 2, barWidth, peakH)
     }
 
@@ -133,7 +133,7 @@ export function WaveformDisplay({ waveformData, position, duration, beatGrid, lo
         const beat = beatGrid.beats[i]
         if (beat < startSec || beat > endSec) continue
         const x = ((beat - startSec) / (endSec - startSec)) * w
-        ctx.strokeStyle = i % 4 === 0 ? 'rgba(255, 255, 255, 0.48)' : 'rgba(255, 255, 255, 0.2)'
+        ctx.strokeStyle = i % 4 === 0 ? 'rgba(255, 236, 205, 0.54)' : 'rgba(255, 255, 255, 0.16)'
         ctx.lineWidth = i % 4 === 0 ? 1.5 : 1
         ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke()
       }
@@ -143,12 +143,12 @@ export function WaveformDisplay({ waveformData, position, duration, beatGrid, lo
     if (loop?.active && loop.startSeconds !== null && loop.endSeconds !== null) {
       if (loop.startSeconds >= startSec && loop.startSeconds <= endSec) {
         const lx = ((loop.startSeconds - startSec) / (endSec - startSec)) * w
-        ctx.strokeStyle = '#00ff64'; ctx.lineWidth = 2
+        ctx.strokeStyle = '#35d487'; ctx.lineWidth = 2
         ctx.beginPath(); ctx.moveTo(lx, 0); ctx.lineTo(lx, h); ctx.stroke()
       }
       if (loop.endSeconds >= startSec && loop.endSeconds <= endSec) {
         const lx = ((loop.endSeconds - startSec) / (endSec - startSec)) * w
-        ctx.strokeStyle = '#00ff64'; ctx.lineWidth = 2
+        ctx.strokeStyle = '#35d487'; ctx.lineWidth = 2
         ctx.beginPath(); ctx.moveTo(lx, 0); ctx.lineTo(lx, h); ctx.stroke()
       }
     }
@@ -167,12 +167,12 @@ export function WaveformDisplay({ waveformData, position, duration, beatGrid, lo
     }
 
     // Playhead
-    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2
-    ctx.shadowColor = 'rgba(255, 74, 74, 0.85)'
-    ctx.shadowBlur = 6
+    ctx.strokeStyle = '#fff7e6'; ctx.lineWidth = 2
+    ctx.shadowColor = 'rgba(246, 163, 58, 0.9)'
+    ctx.shadowBlur = 8
     ctx.beginPath(); ctx.moveTo(w / 2, 0); ctx.lineTo(w / 2, h); ctx.stroke()
     ctx.shadowBlur = 0
-    ctx.fillStyle = '#ff4444'
+    ctx.fillStyle = '#f6a33a'
     ctx.beginPath(); ctx.moveTo(w / 2 - 4, 0); ctx.lineTo(w / 2 + 4, 0); ctx.lineTo(w / 2, 6); ctx.closePath(); ctx.fill()
   }, [waveformData, position, duration, beatGrid, loop, hotCues])
 

@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { CONTROLLER_MODEL_VERSION } from './controllerModelVersion'
 
 export const CONTROLLER_GLB_PATH = '/models/ddj-flx4/ddj-flx4-controller.glb'
-export const CAMERA_PADDING = 1.2
+export const CAMERA_PADDING = 1.05
 /** The authored GLB already has left deck at -X and front controls at -Z. */
 export const CONTROLLER_FRONT_AXIS = '-z'
 
@@ -51,6 +51,8 @@ export function fitCameraToController({
   const maxDim = Math.max(width, depth)
   const halfHeight = Math.max(depth * 0.5, (width / aspect) * 0.5) * padding
   const halfWidth = halfHeight * aspect
+  const viewCenter = center.clone()
+  viewCenter.z += depth * 0.02
 
   // Positive Z is screen-up with the authored front at -Z. Reverse the
   // orthographic horizontal frustum so -X remains screen-left with that
@@ -61,11 +63,11 @@ export function fitCameraToController({
   camera.bottom = -halfHeight
   camera.near = 0.001
   camera.far = Math.max(10, maxDim * 8)
-  camera.position.set(center.x, center.y + maxDim * 2.4, center.z - maxDim * 0.16)
+  camera.position.set(viewCenter.x, center.y + maxDim * 2.4, viewCenter.z - maxDim * 0.16)
   // The GLB is viewed from its authored front (-Z). Positive Z is screen-up,
   // so the play/cue/pad side (-Z) remains at the bottom without mirroring X.
   camera.up.set(0, 0, 1)
-  camera.lookAt(center)
+  camera.lookAt(viewCenter)
   camera.updateProjectionMatrix()
 
   return { center, size, halfWidth, halfHeight }
