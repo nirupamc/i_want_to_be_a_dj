@@ -1,0 +1,18 @@
+export const WAVEFORM_THEME = {
+  backgroundTop: '#10141a',
+  backgroundBottom: '#05070a',
+  laneLine: 'rgba(255, 255, 255, 0.08)',
+  centerLine: '#fff4dc',
+  centerGlow: 'rgba(246, 163, 58, 0.42)',
+  overviewPlayed: '#f1b45c',
+  overviewUnplayed: '#6fb6ff',
+  detailPeak: '#7ec4ff',
+  detailPeakPlayed: '#f2bc72',
+  detailRms: 'rgba(222, 238, 255, 0.28)',
+  beatMinor: 'rgba(226, 234, 245, 0.18)',
+  beatStrong: 'rgba(255, 226, 179, 0.54)',
+  hotCueColors: ['#ff5d5d', '#ff9a3d', '#ffd24d', '#58de7a', '#5fd3ff', '#6b9dff', '#b86dff', '#ff70b8'],
+  loopFill: 'rgba(53, 212, 135, 0.16)',
+  loopLine: '#53e69b',
+  emptyLine: 'rgba(148, 163, 184, 0.34)',
+}

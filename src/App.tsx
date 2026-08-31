@@ -5,12 +5,13 @@ import type { LibraryState, LibrarySortField } from './library/libraryTypes'
 import { getLoadedDeckIds } from './library/libraryHelpers'
 import { BEAT_MULTIPLIER_LABELS } from './audio/effects/types'
 import { getAudioEngine } from './audio'
-import { WaveformDisplay } from './components/WaveformDisplay'
+import { DjWaveform } from './waveform/DjWaveform'
+import { formatWaveformBpm } from './waveform/beatOverlay'
 import { ThreeScene } from './three/ddj-flx4/ThreeScene'
 import type { LibraryBridge } from './three/ddj-flx4/dispatcher'
 import type { DeckState } from './types'
 import { isEditableTarget } from './input/keyboard'
-import { formatRemaining, formatTime, resolveDeckBpmLabel } from './selectors/deckDisplay'
+import { formatRemaining, formatTime } from './selectors/deckDisplay'
 import { StickerLayer } from './customization/StickerLayer'
 import {
   CONTROLLER_THEMES,
@@ -29,7 +30,17 @@ type Drawer = 'library' | 'equipment' | 'settings' | null
 type EquipmentTab = 'effects' | 'sampler' | 'midi'
 type SettingsTab = 'audio' | 'appearance' | 'customization' | 'midi' | 'developer'
 
-function DeckTrackDisplay({ deck, side }: { deck: DeckState; side: 'left' | 'right' }) {
+function DeckTrackDisplay({
+  deck,
+  side,
+  waveformData,
+  onSeek,
+}: {
+  deck: DeckState
+  side: 'left' | 'right'
+  waveformData: ReturnType<DJEngineHandle['getWaveform']>
+  onSeek: (seconds: number) => void
+}) {
   const playState = deck.isPlaying ? 'Playing' : deck.isPaused ? 'Paused' : 'Stopped'
 
   return (
@@ -43,49 +54,67 @@ function DeckTrackDisplay({ deck, side }: { deck: DeckState; side: 'left' | 'rig
       </div>
       <div className="track-artist">{deck.track?.artist ?? 'Unknown artist'}</div>
       <div className="track-meta">
-        <span className="bpm-badge">{resolveDeckBpmLabel(deck)} BPM</span>
+        <span className="bpm-badge">{formatWaveformBpm(deck)}</span>
         <span className="time-pair">
           <span>{formatTime(deck.position)}</span>
           <span>{formatRemaining(deck.position, deck.duration)}</span>
         </span>
       </div>
+      <div className="deck-overview-waveform">
+        <DjWaveform
+          deck={deck.id}
+          variant="overview"
+          waveformData={waveformData}
+          position={deck.position}
+          duration={deck.duration}
+          beatGrid={deck.analysis.beatGrid}
+          loop={deck.loop}
+          hotCues={deck.hotCues}
+          onSeek={onSeek}
+        />
+      </div>
     </section>
   )
 }
 
-function TrackDisplayBar({ state, engine, onSeek }: { state: DJState; engine: DJEngineHandle; onSeek: (deck: 0 | 1, percent: number) => void }) {
+function TrackDisplayBar({ state, engine, onSeek }: { state: DJState; engine: DJEngineHandle; onSeek: (deck: 0 | 1, seconds: number) => void }) {
+  const waveformA = state.decks[0].track ? engine.getWaveform(state.decks[0].track.id) : null
+  const waveformB = state.decks[1].track ? engine.getWaveform(state.decks[1].track.id) : null
+
   return (
     <header className="track-display-bar">
-      <DeckTrackDisplay deck={state.decks[0]} side="left" />
-      <section className="combined-waveform-area" aria-label="Waveform overview">
+      <DeckTrackDisplay deck={state.decks[0]} side="left" waveformData={waveformA} onSeek={(seconds) => onSeek(0, seconds)} />
+      <section className="combined-waveform-area" aria-label="Detailed waveforms">
         <div className="waveform-lane">
           <span className="waveform-deck-chip deck-a">A</span>
-          <WaveformDisplay
-            compact
-            waveformData={state.decks[0].track ? engine.getWaveform(state.decks[0].track.id) : null}
+          <DjWaveform
+            deck={0}
+            variant="detail"
+            waveformData={waveformA}
             position={state.decks[0].position}
             duration={state.decks[0].duration}
             beatGrid={state.decks[0].analysis.beatGrid}
             loop={state.decks[0].loop}
             hotCues={state.decks[0].hotCues}
-            onClick={(percent) => onSeek(0, percent)}
+            onSeek={(seconds) => onSeek(0, seconds)}
           />
         </div>
         <div className="waveform-lane">
           <span className="waveform-deck-chip deck-b">B</span>
-          <WaveformDisplay
-            compact
-            waveformData={state.decks[1].track ? engine.getWaveform(state.decks[1].track.id) : null}
+          <DjWaveform
+            deck={1}
+            variant="detail"
+            waveformData={waveformB}
             position={state.decks[1].position}
             duration={state.decks[1].duration}
             beatGrid={state.decks[1].analysis.beatGrid}
             loop={state.decks[1].loop}
             hotCues={state.decks[1].hotCues}
-            onClick={(percent) => onSeek(1, percent)}
+            onSeek={(seconds) => onSeek(1, seconds)}
           />
         </div>
       </section>
-      <DeckTrackDisplay deck={state.decks[1]} side="right" />
+      <DeckTrackDisplay deck={state.decks[1]} side="right" waveformData={waveformB} onSeek={(seconds) => onSeek(1, seconds)} />
     </header>
   )
 }
@@ -572,6 +601,15 @@ export default function App() {
     return unsub
   }, [engine])
 
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    const globals = globalThis as typeof globalThis & { __LEN_DJ_ENGINE__?: DJEngineHandle }
+    globals.__LEN_DJ_ENGINE__ = engine
+    return () => {
+      if (globals.__LEN_DJ_ENGINE__ === engine) delete globals.__LEN_DJ_ENGINE__
+    }
+  }, [engine])
+
   const libRef = useRef<LibraryService | null>(null)
   if (!libRef.current) libRef.current = new LibraryService()
   const lib = libRef.current
@@ -679,9 +717,9 @@ export default function App() {
     setMidiLastMessage(null)
   }, [])
 
-  const handleSeek = useCallback((deck: 0 | 1, percent: number) => {
+  const handleSeek = useCallback((deck: 0 | 1, seconds: number) => {
     const duration = engine.getState().decks[deck].duration
-    engine.dispatch({ type: 'SEEK', deck, seconds: (percent / 100) * duration })
+    engine.dispatch({ type: 'SEEK', deck, seconds: Math.max(0, Math.min(duration, seconds)) })
   }, [engine])
 
   const handleStickerFile = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {

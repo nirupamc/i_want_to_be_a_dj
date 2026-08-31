@@ -125,26 +125,33 @@ export function applyForcedMaterialProbe(root: THREE.Object3D): void {
 function tuneMaterial(material: ColorMaterial, role: ControllerMaterialRole, themeId: ControllerThemeId): void {
   const theme = getControllerTheme(themeId)
   const accent = new THREE.Color(theme.accent)
+  const materialName = material.name.toLowerCase()
   if (material.color) {
     // These are deliberate role anchors, not multipliers on the authored near-black
     // values. The GLB uses very dark albedos, so a lerp leaves the control surfaces
     // below a usable contrast threshold even when the calibration is assigned.
     if (role === 'panel-label' || role === 'button-label' || role === 'knob-indicator') {
-      material.color.setHex(role === 'knob-indicator' ? 0xf0f4fa : 0xd6dee8)
+      material.color.setHex(role === 'knob-indicator' ? 0xf6f8fb : role === 'panel-label' ? 0xf1f5f9 : 0xf5f8fb)
     } else if (role === 'fader-rail') {
-      material.color.setHex(themeId === 'glossy-black' ? 0x9aa7b5 : 0x8895a4)
+      material.color.setHex(materialName.includes('slot') ? 0x566474 : themeId === 'glossy-black' ? 0xb8c3cf : 0x9ba9b8)
     } else if (role === 'fader-cap') {
-      material.color.setHex(themeId === 'accent-neon' ? 0xbfc8d4 : 0xc8d0da)
+      material.color.setHex(themeId === 'accent-neon' ? 0xe9eef4 : 0xf7f9fb)
     } else if (role === 'jog-ring') {
-      material.color.setHex(material.name.toLowerCase().includes('inner') ? 0x9daab8 : 0x748394)
+      material.color.setHex(materialName.includes('inner') ? 0xb6c2d0 : 0x899aac)
     } else if (role === 'metal-accent') {
       material.color.copy(accent).lerp(new THREE.Color(0x6f7f90), themeId === 'accent-neon' ? 0.25 : 0.75)
     } else if (role === 'knob-body') {
-      material.color.setHex(material.name.toLowerCase().includes('knobtop') ? 0xb8c2ce : 0x788798)
+      material.color.setHex(materialName.includes('knobtop') ? 0xe4eaf0 : 0xb4c2d0)
     } else if (role === 'button-body') {
-      material.color.setHex(themeId === 'glossy-black' ? 0x5d6874 : 0x566576)
+      if (materialName.includes('bezel')) material.color.setHex(0x596a7c)
+      else if (materialName.includes('transporttop')) material.color.setHex(0xc1cbd6)
+      else if (materialName.includes('top')) material.color.setHex(themeId === 'glossy-black' ? 0xa8b5c4 : 0x9baabb)
+      else material.color.setHex(themeId === 'glossy-black' ? 0x8b9bad : 0x8293a6)
     } else if (role === 'pad') {
-      material.color.copy(themeId === 'accent-neon' ? accent : new THREE.Color(0x4a5d72)).lerp(new THREE.Color(0x243142), 0.5)
+      if (materialName.includes('bezel')) material.color.setHex(0x99a8b8)
+      else if (materialName.includes('bed')) material.color.setHex(0x263443)
+      else if (materialName.includes('top')) material.color.setHex(0x70859a)
+      else material.color.setHex(themeId === 'accent-neon' ? 0x758391 : 0x62778c)
     } else if (role === 'chassis') {
       material.color.setHex(themeId === 'glossy-black' ? 0x111820 : 0x151b22)
     }
@@ -164,14 +171,19 @@ function tuneMaterial(material: ColorMaterial, role: ControllerMaterialRole, the
     material.metalness = Math.max(material.metalness, 0.12 + theme.gloss * 0.22)
   }
   if (material.emissive && (role === 'panel-label' || role === 'button-label' || role === 'knob-indicator')) {
-    material.emissive.setHex(role === 'knob-indicator' ? 0x343b44 : 0x7b8796)
-    if (material.emissiveIntensity !== undefined) material.emissiveIntensity = role === 'knob-indicator' ? 0.18 : 0.68
+    material.emissive.setHex(role === 'knob-indicator' ? 0x3d4650 : role === 'panel-label' ? 0xd6dee8 : 0xdce4ee)
+    if (material.emissiveIntensity !== undefined) material.emissiveIntensity = role === 'knob-indicator' ? 0.22 : role === 'panel-label' ? 1.45 : 1.55
     if (role === 'panel-label' || role === 'button-label') textured.toneMapped = false
   }
   if (material.emissive && (role === 'knob-body' || role === 'fader-cap' || role === 'fader-rail' || role === 'jog-ring' || role === 'button-body' || role === 'pad')) {
     material.emissive.copy(role === 'pad' && themeId === 'accent-neon' ? accent : new THREE.Color(role === 'pad' ? 0x2e4154 : 0x435363))
     if (material.emissiveIntensity !== undefined) {
-      material.emissiveIntensity = role === 'jog-ring' ? 0.28 : role === 'button-body' ? 0.3 : 0.34
+      material.emissiveIntensity =
+        role === 'jog-ring' ? 0.28 :
+        role === 'button-body' ? 0.45 :
+        role === 'pad' ? 0.34 :
+        role === 'fader-rail' ? 0.32 :
+        0.4
     }
   }
 }

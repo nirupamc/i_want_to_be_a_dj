@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { buildControlRegistry, type RuntimeControl } from "./controlRegistry";
-import { resetAll, setControlLit, setControlPressed } from "./controlVisuals";
+import { resetAll, setControlHovered, setControlLit, setControlPressed } from "./controlVisuals";
 import { InteractionController, type ExtraHitTarget, type InteractionCallbacks } from "./interaction";
 import { ThreeToEngineDispatcher, type LibraryBridge } from "./dispatcher";
 import { StateSync } from "./stateSync";
@@ -18,6 +18,7 @@ import {
 import type { DJEngineHandle } from "../../types";
 import { applyForcedMaterialProbe, auditVisibleMaterials, calibrateControllerMaterials } from "./visualCalibration";
 import { getControllerTheme, type ControllerThemeId } from "../../customization/controllerCustomization";
+import { getJogPlaybackAngle, shouldManualOwnJogVisual } from "./jogPlaybackRotation";
 
 export interface ThreeSceneProps {
   /** When true the scene renders a "loading" label only — useful for tests. */
@@ -57,6 +58,31 @@ interface SceneRefs {
   controls: Record<string, RuntimeControl>;
   log: string[];
   modelBox: THREE.Box3 | null;
+  jogVisuals: JogVisualRefs | null;
+  hoveredVisualId: string | null;
+}
+
+interface JogVisualTarget {
+  object: THREE.Object3D;
+  marker: THREE.Object3D | null;
+  baseQuaternion: THREE.Quaternion;
+  spinAxis: THREE.Vector3;
+  spinQuaternion: THREE.Quaternion;
+}
+
+interface JogVisualRefs {
+  left: JogVisualTarget | null;
+  right: JogVisualTarget | null;
+  proofSamples: JogPlaybackProofSample[];
+}
+
+interface JogPlaybackProofSample {
+  deck: "left" | "right";
+  position: number;
+  computedAngle: number;
+  rotationAfterUpdate: number;
+  rotationBeforeRender: number;
+  frame: number;
 }
 
 function appendLog(refs: SceneRefs, line: string, max = 30): void {
@@ -80,6 +106,53 @@ function frameModel(camera: THREE.OrthographicCamera, container: HTMLElement, bo
     bounds: targetBox,
     padding: CAMERA_PADDING
   });
+}
+
+function createJogVisualTarget(model: THREE.Object3D, name: string): JogVisualTarget | null {
+  const object = model.getObjectByName(name);
+  if (!object) return null;
+  return {
+    object,
+    marker: model.getObjectByName(name.replace("Visual", "RotationCue")) ?? null,
+    baseQuaternion: object.quaternion.clone(),
+    spinAxis: new THREE.Vector3(0, 1, 0),
+    spinQuaternion: new THREE.Quaternion()
+  };
+}
+
+function applyJogVisualSpin(target: JogVisualTarget, angle: number): void {
+  target.spinQuaternion.setFromAxisAngle(target.spinAxis, angle);
+  target.object.quaternion.copy(target.baseQuaternion).multiply(target.spinQuaternion);
+}
+
+function readJogVisualAngle(target: JogVisualTarget | null): number {
+  return target?.object.rotation.y ?? 0;
+}
+
+function readJogMarkerWorldAngle(target: JogVisualTarget | null): number | null {
+  if (!target?.marker) return null;
+  target.object.updateWorldMatrix(true, true);
+  const center = new THREE.Vector3().setFromMatrixPosition(target.object.matrixWorld);
+  const marker = new THREE.Vector3().setFromMatrixPosition(target.marker.matrixWorld);
+  return Math.atan2(marker.x - center.x, marker.z - center.z);
+}
+
+function pushProofSample(
+  refs: SceneRefs,
+  sample: Omit<JogPlaybackProofSample, "frame">,
+  frame: number
+): void {
+  const visuals = refs.jogVisuals;
+  if (!visuals) return;
+  visuals.proofSamples.push({ ...sample, frame });
+  if (visuals.proofSamples.length > 240) visuals.proofSamples.splice(0, visuals.proofSamples.length - 240);
+}
+
+function jogVisualForId(visuals: JogVisualRefs | null, id: string): JogVisualTarget | null {
+  if (!visuals) return null;
+  if (id === CONTROL_IDS.decks.left.jog || id === `${CONTROL_IDS.decks.left.jog}.rim`) return visuals.left;
+  if (id === CONTROL_IDS.decks.right.jog || id === `${CONTROL_IDS.decks.right.jog}.rim`) return visuals.right;
+  return null;
 }
 
 export function ThreeScene({ interactive = true, engine, library, freeCamera = false, showDebug = false, themeId = 'default-dark', onDebugState }: ThreeSceneProps): JSX.Element {
@@ -144,7 +217,9 @@ export function ThreeScene({ interactive = true, engine, library, freeCamera = f
       stateSync: null,
       controls: {},
       log: [],
-      modelBox: null
+      modelBox: null,
+      jogVisuals: null,
+      hoveredVisualId: null
     };
     refs.current = refsLocal;
 
@@ -186,6 +261,46 @@ export function ThreeScene({ interactive = true, engine, library, freeCamera = f
         const { controls } = buildControlRegistry(model);
         refsLocal.controls = controls;
         resetAll(Object.values(controls));
+        refsLocal.jogVisuals = {
+          left: createJogVisualTarget(model, "LeftJogWheelVisual"),
+          right: createJogVisualTarget(model, "RightJogWheelVisual"),
+          proofSamples: []
+        };
+        if (import.meta.env.DEV) {
+          (globalThis as typeof globalThis & { __DDJ_FLX4_JOG_PLAYBACK_SAMPLES__?: unknown }).__DDJ_FLX4_JOG_PLAYBACK_SAMPLES__ = refsLocal.jogVisuals.proofSamples;
+          (globalThis as typeof globalThis & { __DDJ_FLX4_JOG_VISUAL_TARGETS__?: unknown }).__DDJ_FLX4_JOG_VISUAL_TARGETS__ = {
+            left: refsLocal.jogVisuals.left?.object.name ?? null,
+            right: refsLocal.jogVisuals.right?.object.name ?? null,
+            leftMarker: refsLocal.jogVisuals.left?.marker?.name ?? null,
+            rightMarker: refsLocal.jogVisuals.right?.marker?.name ?? null,
+            axis: "local-y"
+          };
+          (globalThis as typeof globalThis & { __DDJ_FLX4_READ_JOG_VISUALS__?: unknown }).__DDJ_FLX4_READ_JOG_VISUALS__ = () => {
+            const state = engine.getState();
+            return {
+              left: {
+                position: state.decks[0].position,
+                playing: state.decks[0].isPlaying,
+                touchingPlatter: state.decks[0].jog.touchingPlatter,
+                touchingRim: state.decks[0].jog.touchingRim,
+                scratching: state.decks[0].scratch.active,
+                computedAngle: getJogPlaybackAngle(state.decks[0].position),
+                visualRotationY: readJogVisualAngle(refsLocal.jogVisuals?.left ?? null),
+                markerWorldAngle: readJogMarkerWorldAngle(refsLocal.jogVisuals?.left ?? null)
+              },
+              right: {
+                position: state.decks[1].position,
+                playing: state.decks[1].isPlaying,
+                touchingPlatter: state.decks[1].jog.touchingPlatter,
+                touchingRim: state.decks[1].jog.touchingRim,
+                scratching: state.decks[1].scratch.active,
+                computedAngle: getJogPlaybackAngle(state.decks[1].position),
+                visualRotationY: readJogVisualAngle(refsLocal.jogVisuals?.right ?? null),
+                markerWorldAngle: readJogMarkerWorldAngle(refsLocal.jogVisuals?.right ?? null)
+              }
+            };
+          };
+        }
 
         const dispatcher = new ThreeToEngineDispatcher(engine, library);
         refsLocal.dispatcher = dispatcher;
@@ -252,7 +367,8 @@ export function ThreeScene({ interactive = true, engine, library, freeCamera = f
           onJogMove: (id, info) => {
             const c = controls[id];
             if (c) {
-              c.object.rotation.y += info.deltaRadians;
+              const visual = jogVisualForId(refsLocal.jogVisuals, id);
+              if (visual) visual.object.rotateOnAxis(visual.spinAxis, info.deltaRadians);
               dispatcher.onJogMove(c, info);
             }
             appendLog(refsLocal, `JOG  ${id} d=${info.deltaRadians.toFixed(3)} v=${info.velocity.toFixed(2)}`);
@@ -266,6 +382,15 @@ export function ThreeScene({ interactive = true, engine, library, freeCamera = f
           },
           onHoverChange: (id) => {
             refsLocal.controller?.setHoveredControl(id);
+            if (refsLocal.hoveredVisualId && refsLocal.hoveredVisualId !== id) {
+              const previous = controls[refsLocal.hoveredVisualId];
+              if (previous) setControlHovered(previous, false);
+            }
+            if (id && refsLocal.hoveredVisualId !== id) {
+              const next = controls[id];
+              if (next) setControlHovered(next, true);
+            }
+            refsLocal.hoveredVisualId = id;
             pushDebug({ hoveredId: id, controlKind: id ? controls[id]?.kind ?? null : null });
           }
         };
@@ -429,7 +554,43 @@ export function ThreeScene({ interactive = true, engine, library, freeCamera = f
     window.addEventListener("resize", resizeScene);
     document.addEventListener("fullscreenchange", resizeScene);
 
+    let frame = 0;
+    const updateJogPlaybackVisuals = (): void => {
+      const visuals = refsLocal.jogVisuals;
+      if (!visuals) return;
+      const state = engine.getState();
+      for (const deckIndex of [0, 1] as const) {
+        const deck = state.decks[deckIndex];
+        const visual = deckIndex === 0 ? visuals.left : visuals.right;
+        if (!visual) continue;
+        const manuallyOwned = shouldManualOwnJogVisual({
+          touchingPlatter: deck.jog.touchingPlatter,
+          touchingRim: deck.jog.touchingRim,
+          scratching: deck.scratch.active
+        });
+        if (manuallyOwned) continue;
+        const computedAngle = getJogPlaybackAngle(deck.position);
+        applyJogVisualSpin(visual, computedAngle);
+        if (import.meta.env.DEV) {
+          const rotationAfterUpdate = readJogVisualAngle(visual);
+          pushProofSample(
+            refsLocal,
+            {
+              deck: deckIndex === 0 ? "left" : "right",
+              position: deck.position,
+              computedAngle,
+              rotationAfterUpdate,
+              rotationBeforeRender: readJogVisualAngle(visual)
+            },
+            frame
+          );
+        }
+      }
+    };
+
     const tick = (): void => {
+      frame += 1;
+      updateJogPlaybackVisuals();
       renderer.render(scene, camera);
       rafRef.current = requestAnimationFrame(tick);
     };
@@ -440,6 +601,10 @@ export function ThreeScene({ interactive = true, engine, library, freeCamera = f
       window.removeEventListener("resize", resizeScene);
       document.removeEventListener("fullscreenchange", resizeScene);
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      if (refsLocal.hoveredVisualId) {
+        const hovered = refsLocal.controls[refsLocal.hoveredVisualId];
+        if (hovered) setControlHovered(hovered, false);
+      }
       refsLocal.controller?.releaseDrag();
       refsLocal.controller?.detach();
       refsLocal.stateSync?.stop();

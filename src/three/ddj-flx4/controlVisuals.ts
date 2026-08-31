@@ -12,6 +12,7 @@ const UNLIT_INTENSITY = 0.0;
 const PRESS_DEPTH = 0.0025; // metres of travel when a button/pad is pressed
 
 type LitClone = THREE.MeshStandardMaterial & { __litOwner?: THREE.Mesh };
+type HoverMesh = THREE.Mesh & { __hoverBaseMaterial?: THREE.Material | THREE.Material[] };
 
 function ensureMaterialClone(mesh: THREE.Mesh): THREE.MeshStandardMaterial {
   const cached = (mesh as THREE.Mesh & { __litClone?: LitClone }).__litClone;
@@ -40,6 +41,36 @@ export function setControlPressed(control: RuntimeControl, pressed: boolean): vo
   }
   const base = target.userData.__pressBase as number;
   target.position[axis] = pressed ? base - PRESS_DEPTH : base;
+}
+
+export function setControlHovered(control: RuntimeControl, hovered: boolean): void {
+  control.object.traverse((object) => {
+    if (!(object as THREE.Mesh).isMesh || object.userData.__interactionHitbox) return;
+    if (control.litMesh && object === control.litMesh) return;
+    const mesh = object as HoverMesh;
+    if (hovered) {
+      if (mesh.__hoverBaseMaterial) return;
+      mesh.__hoverBaseMaterial = mesh.material;
+      const sourceMaterials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      const hoverMaterials = sourceMaterials.map((source) => {
+        const clone = source.clone() as THREE.Material & { color?: THREE.Color; emissive?: THREE.Color; emissiveIntensity?: number };
+        if (clone.color) clone.color.lerp(new THREE.Color(0xffffff), 0.1);
+        if (clone.emissive && clone.emissiveIntensity !== undefined) {
+          clone.emissive.lerp(new THREE.Color(0xaec2d6), 0.25);
+          clone.emissiveIntensity = Math.min(0.55, clone.emissiveIntensity + 0.12);
+        }
+        return clone;
+      });
+      mesh.material = Array.isArray(mesh.material) ? hoverMaterials : hoverMaterials[0];
+      return;
+    }
+    if (mesh.__hoverBaseMaterial) {
+      const currentMaterials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const material of currentMaterials) material.dispose();
+      mesh.material = mesh.__hoverBaseMaterial;
+      delete mesh.__hoverBaseMaterial;
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------
