@@ -126,6 +126,12 @@ function tuneMaterial(material: ColorMaterial, role: ControllerMaterialRole, the
   const theme = getControllerTheme(themeId)
   const accent = new THREE.Color(theme.accent)
   const materialName = material.name.toLowerCase()
+  const physical = material as ColorMaterial & {
+    clearcoat?: number
+    clearcoatRoughness?: number
+    sheen?: number
+    sheenRoughness?: number
+  }
   if (material.color) {
     // These are deliberate role anchors, not multipliers on the authored near-black
     // values. The GLB uses very dark albedos, so a lerp leaves the control surfaces
@@ -153,7 +159,7 @@ function tuneMaterial(material: ColorMaterial, role: ControllerMaterialRole, the
       else if (materialName.includes('top')) material.color.setHex(0x70859a)
       else material.color.setHex(themeId === 'accent-neon' ? 0x758391 : 0x62778c)
     } else if (role === 'chassis') {
-      material.color.setHex(themeId === 'glossy-black' ? 0x111820 : 0x151b22)
+      material.color.setHex(themeId === 'glossy-black' ? 0x0b0f14 : themeId === 'accent-neon' ? 0x10151b : 0x141920)
     }
   }
   const textured = material as ColorMaterial & { map?: THREE.Texture | null; toneMapped?: boolean }
@@ -163,12 +169,20 @@ function tuneMaterial(material: ColorMaterial, role: ControllerMaterialRole, the
     textured.map = null
   }
   if (material.roughness !== undefined) {
-    if (role === 'fader-cap' || role === 'jog-ring' || role === 'metal-accent') material.roughness = Math.min(material.roughness, 0.48 - theme.gloss * 0.18)
-    if (role === 'button-body' || role === 'knob-body' || role === 'pad') material.roughness = Math.min(material.roughness, 0.62 - theme.gloss * 0.18)
-    if (role === 'panel-label' || role === 'button-label' || role === 'knob-indicator') material.roughness = Math.min(material.roughness, 0.7)
+    if (role === 'chassis') material.roughness = themeId === 'glossy-black' ? 0.38 : 0.66
+    if (role === 'fader-cap' || role === 'jog-ring' || role === 'metal-accent') material.roughness = Math.min(material.roughness, 0.46 - theme.gloss * 0.2)
+    if (role === 'button-body' || role === 'knob-body' || role === 'pad') material.roughness = Math.min(material.roughness, themeId === 'glossy-black' ? 0.42 : 0.58)
+    if (role === 'panel-label' || role === 'button-label' || role === 'knob-indicator') material.roughness = Math.min(material.roughness, 0.64)
   }
   if (material.metalness !== undefined && (role === 'jog-ring' || role === 'fader-cap' || role === 'knob-body' || role === 'metal-accent')) {
     material.metalness = Math.max(material.metalness, 0.12 + theme.gloss * 0.22)
+  }
+  if (physical.clearcoat !== undefined) {
+    physical.clearcoat =
+      themeId === 'glossy-black' && role === 'chassis' ? 0.48 :
+      themeId === 'glossy-black' && (role === 'button-body' || role === 'jog-ring' || role === 'knob-body') ? 0.28 :
+      0.08
+    physical.clearcoatRoughness = role === 'chassis' ? 0.42 : 0.32
   }
   if (material.emissive && (role === 'panel-label' || role === 'button-label' || role === 'knob-indicator')) {
     material.emissive.setHex(role === 'knob-indicator' ? 0x3d4650 : role === 'panel-label' ? 0xd6dee8 : 0xdce4ee)

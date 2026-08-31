@@ -181,16 +181,13 @@ function fourBeatBinding(side: Side): ControlBinding {
   }
 }
 
-// Loop call left/right are present in the GLB but have no engine action in
-// the current M7 vocabulary. The 3D control remains interactive but is
-// marked UNBOUND.
 function loopCallBinding(side: Side, direction: 'left' | 'right'): ControlBinding {
   const id = side === 'A'
     ? (direction === 'left' ? CONTROL_IDS.decks.left.callLeft : CONTROL_IDS.decks.left.callRight)
     : (direction === 'left' ? CONTROL_IDS.decks.right.callLeft : CONTROL_IDS.decks.right.callRight)
   return {
-    id, kind: 'button', unbound: true,
-    onDown: noop, onUp: noop, onValue: noopValue,
+    id, kind: 'button',
+    onDown: () => ({ actions: [{ type: direction === 'left' ? 'LOOP_HALF' : 'LOOP_DOUBLE', deck: side === 'A' ? 0 : 1 }] }), onUp: noop, onValue: noopValue,
     onJogStart: noop, onJogMove: noopJog, onJogEnd: noop
   }
 }

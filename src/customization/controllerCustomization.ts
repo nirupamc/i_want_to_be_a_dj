@@ -17,6 +17,8 @@ export interface ControllerSticker {
   scale: number
   rotation: number
   gloss: number
+  finish: 'matte' | 'glossy' | 'holographic'
+  placementMode: 'screen-controller' | 'surface-decal'
 }
 
 export interface StickerDragInput {
@@ -47,6 +49,8 @@ export function createSticker(input: { id: string; name: string; imageDataUrl: s
     scale: 1,
     rotation: 0,
     gloss: 0.55,
+    finish: 'glossy',
+    placementMode: 'screen-controller',
   }
 }
 
@@ -94,6 +98,8 @@ function sanitizeSticker(sticker: ControllerSticker): ControllerSticker {
     scale: Math.max(0.35, Math.min(2.2, sticker.scale)),
     rotation: normalizeRotation(sticker.rotation),
     gloss: clamp01(sticker.gloss),
+    finish: sticker.finish ?? 'glossy',
+    placementMode: sticker.placementMode ?? 'screen-controller',
   }
 }
 

@@ -2,4 +2,21 @@ node_modules/
 dist/
 .vite/
 .env
-.env.*
+.env.*# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Vite / Vitest cache
+node_modules/.vite/
+
+# TypeScript incremental cache
+*.tsbuildinfo
+
+# Local temporary verification files
+.utim_tmp/
+
+# Generic temp files
+*.tmp
+*.temp

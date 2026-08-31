@@ -87,9 +87,11 @@ describe("M12B engine bindings — input dispatch", () => {
     expect(adapter.listUnbound()).toContain(CONTROL_IDS.decks.left.padFx1Mode);
   });
 
-  it("Loop call left/right are unbound", () => {
-    expect(adapter.onDown(makeControl(CONTROL_IDS.decks.left.callLeft) as never)).toEqual([]);
-    expect(adapter.onDown(makeControl(CONTROL_IDS.decks.right.callRight) as never)).toEqual([]);
+  it("Loop call left/right use the existing loop actions", () => {
+    expect(adapter.onDown(makeControl(CONTROL_IDS.decks.left.callLeft) as never)).toEqual([{ type: "LOOP_HALF", deck: 0 }]);
+    expect(adapter.onDown(makeControl(CONTROL_IDS.decks.right.callRight) as never)).toEqual([{ type: "LOOP_DOUBLE", deck: 1 }]);
+    expect(adapter.listUnbound()).not.toContain(CONTROL_IDS.decks.left.callLeft);
+    expect(adapter.listUnbound()).not.toContain(CONTROL_IDS.decks.right.callRight);
   });
 
   it("Headphones/Mic are unbound (not in engine state)", () => {

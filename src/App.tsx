@@ -7,12 +7,13 @@ import { BEAT_MULTIPLIER_LABELS } from './audio/effects/types'
 import { getAudioEngine } from './audio'
 import { DjWaveform } from './waveform/DjWaveform'
 import { formatWaveformBpm } from './waveform/beatOverlay'
-import { ThreeScene } from './three/ddj-flx4/ThreeScene'
+import { ThreeScene, type ControllerProjection } from './three/ddj-flx4/ThreeScene'
 import type { LibraryBridge } from './three/ddj-flx4/dispatcher'
 import type { DeckState } from './types'
 import { isEditableTarget } from './input/keyboard'
 import { formatRemaining, formatTime } from './selectors/deckDisplay'
 import { StickerLayer } from './customization/StickerLayer'
+import { ControlLabelsOverlay, type ControlLabelMode } from './components/ControlLabelsOverlay'
 import {
   CONTROLLER_THEMES,
   createSticker,
@@ -124,15 +125,23 @@ function StudioToolbar({
   focusMode,
   trackCount,
   midiEnabled,
+  labelMode,
+  testerMode,
   onToggleDrawer,
   onToggleFocus,
+  onCycleLabelMode,
+  onToggleTesterMode,
 }: {
   activeDrawer: Drawer
   focusMode: boolean
   trackCount: number
   midiEnabled: boolean
+  labelMode: ControlLabelMode
+  testerMode: boolean
   onToggleDrawer: (drawer: Exclude<Drawer, null>) => void
   onToggleFocus: () => void
+  onCycleLabelMode: () => void
+  onToggleTesterMode: () => void
 }) {
   return (
     <nav className="studio-toolbar" aria-label="Studio navigation">
@@ -150,6 +159,12 @@ function StudioToolbar({
       <div className="toolbar-right">
         <span className="toolbar-count">{trackCount} tracks</span>
         <span className={`toolbar-midi ${midiEnabled ? 'active' : ''}`}>MIDI {midiEnabled ? 'on' : 'off'}</span>
+        <button className={`toolbar-button toolbar-labels-button ${labelMode !== 'off' ? 'active' : ''}`} onClick={onCycleLabelMode} aria-pressed={labelMode !== 'off'}>
+          Labels {labelMode === 'off' ? 'Off' : labelMode === 'minimal' ? 'Minimal' : 'Full'}
+        </button>
+        <button className={`toolbar-button toolbar-labels-button ${testerMode ? 'active' : ''}`} onClick={onToggleTesterMode} aria-pressed={testerMode}>
+          Tester {testerMode ? 'On' : 'Off'}
+        </button>
         <button className={`toolbar-icon-button ${focusMode ? 'active' : ''}`} onClick={onToggleFocus} aria-label="Toggle focus view" title="Toggle focus view">
           <span aria-hidden="true" />
         </button>
@@ -467,6 +482,7 @@ function SettingsPanel({
   themeId,
   stickers,
   selectedStickerId,
+  stickerEditMode,
   activeTab,
   onToggleDebug,
   onMasterChange,
@@ -475,6 +491,7 @@ function SettingsPanel({
   onSelectSticker,
   onUpdateSticker,
   onRemoveSticker,
+  onToggleStickerEditMode,
   onSetActiveTab,
 }: {
   state: DJState
@@ -483,6 +500,7 @@ function SettingsPanel({
   themeId: ControllerThemeId
   stickers: ControllerSticker[]
   selectedStickerId: string | null
+  stickerEditMode: boolean
   activeTab: SettingsTab
   onToggleDebug: () => void
   onMasterChange: (level: number) => void
@@ -491,6 +509,7 @@ function SettingsPanel({
   onSelectSticker: (id: string | null) => void
   onUpdateSticker: (id: string, patch: Partial<Omit<ControllerSticker, 'id' | 'imageDataUrl'>>) => void
   onRemoveSticker: (id: string) => void
+  onToggleStickerEditMode: () => void
   onSetActiveTab: (tab: SettingsTab) => void
 }) {
   const stickerFileRef = useRef<HTMLInputElement>(null)
@@ -536,6 +555,9 @@ function SettingsPanel({
         <h2>Customization</h2>
         <div className="sticker-controls">
           <button className="import-btn" type="button" onClick={() => stickerFileRef.current?.click()}>Add sticker</button>
+          <button className={`toolbar-button ${stickerEditMode ? 'active' : ''}`} type="button" onClick={onToggleStickerEditMode}>
+            {stickerEditMode ? 'Finish editing' : 'Edit stickers'}
+          </button>
           <input ref={stickerFileRef} type="file" accept="image/*" hidden onChange={onStickerFile} />
           {stickers.length > 0 && (
             <select value={selectedStickerId ?? ''} onChange={(event) => onSelectSticker(event.target.value || null)} aria-label="Selected sticker">
@@ -560,6 +582,15 @@ function SettingsPanel({
               <span>Gloss</span>
               <input type="range" min={0} max={1} step={0.01} value={selectedSticker.gloss} onChange={(event) => onUpdateSticker(selectedSticker.id, { gloss: Number(event.target.value) })} />
               <span>{Math.round(selectedSticker.gloss * 100)}%</span>
+            </label>
+            <label className="control">
+              <span>Finish</span>
+              <select value={selectedSticker.finish} onChange={(event) => onUpdateSticker(selectedSticker.id, { finish: event.target.value as ControllerSticker['finish'] })}>
+                <option value="matte">Matte</option>
+                <option value="glossy">Glossy</option>
+                <option value="holographic">Holographic</option>
+              </select>
+              <span>{selectedSticker.placementMode}</span>
             </label>
             <button className="remove-btn sticker-remove" type="button" onClick={() => onRemoveSticker(selectedSticker.id)}>Remove sticker</button>
           </div>
@@ -592,9 +623,14 @@ export default function App() {
   const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>('audio')
   const [debugEnabled, setDebugEnabled] = useState(false)
   const [focusMode, setFocusMode] = useState(false)
+  const [labelMode, setLabelMode] = useState<ControlLabelMode>('off')
+  const [testerMode, setTesterMode] = useState(false)
   const [controllerTheme, setControllerTheme] = useState<ControllerThemeId>('default-dark')
   const [stickers, setStickers] = useState<ControllerSticker[]>([])
   const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null)
+  const [stickerEditMode, setStickerEditMode] = useState(false)
+  const [controllerProjection, setControllerProjection] = useState<ControllerProjection | null>(null)
+  const [hoveredControlId, setHoveredControlId] = useState<string | null>(null)
 
   useEffect(() => {
     const unsub = engine.subscribe(setState)
@@ -609,6 +645,26 @@ export default function App() {
       if (globals.__LEN_DJ_ENGINE__ === engine) delete globals.__LEN_DJ_ENGINE__
     }
   }, [engine])
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    const globals = globalThis as typeof globalThis & { __PHASE2_ADD_STICKER__?: (imageDataUrl: string) => void }
+    globals.__PHASE2_ADD_STICKER__ = (imageDataUrl: string) => {
+      const sticker = createSticker({
+        id: `sticker-${Date.now()}-${Math.round(Math.random() * 10000)}`,
+        name: 'Phase 2 sticker',
+        imageDataUrl,
+        x: 0.5,
+        y: 0.38,
+      })
+      setStickers((current) => [...current, sticker])
+      setSelectedStickerId(sticker.id)
+      setStickerEditMode(true)
+    }
+    return () => {
+      delete globals.__PHASE2_ADD_STICKER__
+    }
+  }, [])
 
   const libRef = useRef<LibraryService | null>(null)
   if (!libRef.current) libRef.current = new LibraryService()
@@ -738,6 +794,7 @@ export default function App() {
       })
       setStickers((current) => [...current, sticker])
       setSelectedStickerId(sticker.id)
+      setStickerEditMode(true)
     }
     reader.readAsDataURL(file)
     event.target.value = ''
@@ -760,6 +817,18 @@ export default function App() {
     setActiveDrawer((current) => current === drawer ? null : drawer)
   }, [])
 
+  const cycleLabelMode = useCallback(() => {
+    setLabelMode((current) => current === 'off' ? 'minimal' : current === 'minimal' ? 'full' : 'off')
+  }, [])
+
+  const toggleTesterMode = useCallback(() => {
+    setTesterMode((current) => {
+      const next = !current
+      if (next) setLabelMode('full')
+      return next
+    })
+  }, [])
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
@@ -779,15 +848,30 @@ export default function App() {
         focusMode={focusMode}
         trackCount={libState.tracks.length}
         midiEnabled={midiEnabled}
+        labelMode={labelMode}
+        testerMode={testerMode}
         onToggleDrawer={toggleDrawer}
         onToggleFocus={() => setFocusMode((v) => !v)}
+        onCycleLabelMode={cycleLabelMode}
+        onToggleTesterMode={toggleTesterMode}
       />
 
       <main className="controller-stage">
-        <ThreeScene interactive={true} engine={engine} library={libraryBridge.current!} showDebug={debugEnabled} themeId={controllerTheme} />
+        <ThreeScene
+          interactive={true}
+          engine={engine}
+          library={libraryBridge.current!}
+          showDebug={debugEnabled}
+          themeId={controllerTheme}
+          onProjectionUpdate={setControllerProjection}
+          onHoverControl={setHoveredControlId}
+        />
+        <ControlLabelsOverlay mode={labelMode} testerMode={testerMode} hoveredId={hoveredControlId} projection={controllerProjection} />
         <StickerLayer
           stickers={stickers}
           selectedId={selectedStickerId}
+          editMode={stickerEditMode}
+          controllerBounds={controllerProjection?.bounds ?? null}
           onSelect={setSelectedStickerId}
           onChange={handleStickerChange}
         />
@@ -839,6 +923,7 @@ export default function App() {
             themeId={controllerTheme}
             stickers={stickers}
             selectedStickerId={selectedStickerId}
+            stickerEditMode={stickerEditMode}
             activeTab={activeSettingsTab}
             onToggleDebug={() => setDebugEnabled((v) => !v)}
             onMasterChange={(level) => engine.dispatch({ type: 'SET_MASTER', level })}
@@ -847,6 +932,7 @@ export default function App() {
             onSelectSticker={setSelectedStickerId}
             onUpdateSticker={handleStickerUpdate}
             onRemoveSticker={handleStickerRemove}
+            onToggleStickerEditMode={() => setStickerEditMode((value) => !value)}
             onSetActiveTab={setActiveSettingsTab}
           />
         )}

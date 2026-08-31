@@ -32,8 +32,36 @@ export interface ThreeSceneProps {
   /** Shows raw IDs, event logs, and development controls. */
   showDebug?: boolean;
   themeId?: ControllerThemeId;
+  onProjectionUpdate?: (projection: ControllerProjection) => void;
+  onHoverControl?: (id: string | null) => void;
   /** Hooks for debug HUD. */
   onDebugState?: (state: DebugState) => void;
+}
+
+export interface ProjectedControlAnchor {
+  id: string;
+  x: number;
+  y: number;
+}
+
+export interface ProjectedControllerBounds {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+export interface ControllerProjection {
+  controls: ProjectedControlAnchor[];
+  bounds: ProjectedControllerBounds | null;
+  canvas: {
+    width: number;
+    height: number;
+  };
+  renderer: {
+    maxAnisotropy: number;
+    devicePixelRatio: number;
+  };
 }
 
 export interface DebugState {
@@ -60,6 +88,7 @@ interface SceneRefs {
   modelBox: THREE.Box3 | null;
   jogVisuals: JogVisualRefs | null;
   hoveredVisualId: string | null;
+  textureAudit: { maxAnisotropy: number };
 }
 
 interface JogVisualTarget {
@@ -106,6 +135,83 @@ function frameModel(camera: THREE.OrthographicCamera, container: HTMLElement, bo
     bounds: targetBox,
     padding: CAMERA_PADDING
   });
+}
+
+function projectWorldToCanvas(point: THREE.Vector3, camera: THREE.Camera, container: HTMLElement): { x: number; y: number } {
+  const projected = point.clone().project(camera);
+  return {
+    x: ((projected.x + 1) / 2) * container.clientWidth,
+    y: ((1 - projected.y) / 2) * container.clientHeight
+  };
+}
+
+function projectBoxToCanvas(box: THREE.Box3, camera: THREE.Camera, container: HTMLElement): ProjectedControllerBounds {
+  const points: THREE.Vector3[] = [];
+  for (const x of [box.min.x, box.max.x]) {
+    for (const y of [box.min.y, box.max.y]) {
+      for (const z of [box.min.z, box.max.z]) {
+        points.push(new THREE.Vector3(x, y, z));
+      }
+    }
+  }
+  const projected = points.map((point) => projectWorldToCanvas(point, camera, container));
+  const left = Math.max(0, Math.min(...projected.map((point) => point.x)));
+  const top = Math.max(0, Math.min(...projected.map((point) => point.y)));
+  const right = Math.min(container.clientWidth, Math.max(...projected.map((point) => point.x)));
+  const bottom = Math.min(container.clientHeight, Math.max(...projected.map((point) => point.y)));
+  return { left, top, width: Math.max(1, right - left), height: Math.max(1, bottom - top) };
+}
+
+function makeProjection(refs: SceneRefs, container: HTMLElement): ControllerProjection {
+  refs.scene.updateMatrixWorld(true);
+  return {
+    controls: Object.values(refs.controls).map((control) => {
+      control.object.updateWorldMatrix(true, true);
+      const box = new THREE.Box3().setFromObject(control.hitTarget ?? control.object);
+      return {
+        id: control.id,
+        ...projectWorldToCanvas(box.getCenter(new THREE.Vector3()), refs.camera, container)
+      };
+    }),
+    bounds: refs.modelBox ? projectBoxToCanvas(refs.modelBox, refs.camera, container) : null,
+    canvas: {
+      width: container.clientWidth,
+      height: container.clientHeight
+    },
+    renderer: {
+      maxAnisotropy: refs.textureAudit.maxAnisotropy,
+      devicePixelRatio: Math.min(window.devicePixelRatio, 2)
+    }
+  };
+}
+
+function tuneTextureQuality(root: THREE.Object3D, maxAnisotropy: number): void {
+  const textures = new Set<THREE.Texture>();
+  root.traverse((object) => {
+    if (!(object as THREE.Mesh).isMesh) return;
+    const material = (object as THREE.Mesh).material;
+    const materials = Array.isArray(material) ? material : [material];
+    for (const entry of materials) {
+      const textured = entry as THREE.Material & {
+        map?: THREE.Texture | null;
+        emissiveMap?: THREE.Texture | null;
+        normalMap?: THREE.Texture | null;
+        roughnessMap?: THREE.Texture | null;
+        metalnessMap?: THREE.Texture | null;
+        aoMap?: THREE.Texture | null;
+      };
+      for (const texture of [textured.map, textured.emissiveMap, textured.normalMap, textured.roughnessMap, textured.metalnessMap, textured.aoMap]) {
+        if (texture) textures.add(texture);
+      }
+    }
+  });
+  for (const texture of textures) {
+    texture.anisotropy = Math.min(maxAnisotropy, 8);
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = true;
+    texture.needsUpdate = true;
+  }
 }
 
 function createJogVisualTarget(model: THREE.Object3D, name: string): JogVisualTarget | null {
@@ -155,7 +261,17 @@ function jogVisualForId(visuals: JogVisualRefs | null, id: string): JogVisualTar
   return null;
 }
 
-export function ThreeScene({ interactive = true, engine, library, freeCamera = false, showDebug = false, themeId = 'default-dark', onDebugState }: ThreeSceneProps): JSX.Element {
+export function ThreeScene({
+  interactive = true,
+  engine,
+  library,
+  freeCamera = false,
+  showDebug = false,
+  themeId = 'default-dark',
+  onProjectionUpdate,
+  onHoverControl,
+  onDebugState
+}: ThreeSceneProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const refs = useRef<SceneRefs | null>(null);
@@ -219,7 +335,8 @@ export function ThreeScene({ interactive = true, engine, library, freeCamera = f
       log: [],
       modelBox: null,
       jogVisuals: null,
-      hoveredVisualId: null
+      hoveredVisualId: null,
+      textureAudit: { maxAnisotropy: renderer.capabilities.getMaxAnisotropy() }
     };
     refs.current = refsLocal;
 
@@ -251,6 +368,7 @@ export function ThreeScene({ interactive = true, engine, library, freeCamera = f
         const materialCalibration = calibrateControllerMaterials(model, !originalMaterials, themeId);
         const materialProbe = import.meta.env.DEV && new URLSearchParams(window.location.search).get("materialProbe") === "forced";
         if (materialProbe) applyForcedMaterialProbe(model);
+        tuneTextureQuality(model, renderer.capabilities.getMaxAnisotropy());
         model.name = "DDJ_FLX4_LoadedRoot";
         const presentationRoot = createControllerPresentationRoot(model);
         scene.add(presentationRoot);
@@ -392,6 +510,7 @@ export function ThreeScene({ interactive = true, engine, library, freeCamera = f
             }
             refsLocal.hoveredVisualId = id;
             pushDebug({ hoveredId: id, controlKind: id ? controls[id]?.kind ?? null : null });
+            onHoverControl?.(id);
           }
         };
 
@@ -452,6 +571,7 @@ export function ThreeScene({ interactive = true, engine, library, freeCamera = f
               outputColorSpace: renderer.outputColorSpace,
               toneMapping: renderer.toneMapping,
               toneMappingExposure: renderer.toneMappingExposure,
+              maxAnisotropy: renderer.capabilities.getMaxAnisotropy(),
               antialias: true,
               shadows: renderer.shadowMap.enabled
             },
@@ -524,6 +644,7 @@ export function ThreeScene({ interactive = true, engine, library, freeCamera = f
             selectedTargets: selectedTargets.map((target) => ({ id: target.id, uuid: target.hitboxUuid, targetName: target.targetName, parentName: target.parentName }))
           })}`);
         }
+        onProjectionUpdate?.(makeProjection(refsLocal, container));
         setLoading(false);
       },
       undefined,
@@ -548,6 +669,7 @@ export function ThreeScene({ interactive = true, engine, library, freeCamera = f
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       renderer.setSize(w, h, false);
       frameModel(camera, container, refsLocal.modelBox);
+      onProjectionUpdate?.(makeProjection(refsLocal, container));
     };
     const resizeObserver = new ResizeObserver(resizeScene);
     resizeObserver.observe(container);
@@ -612,7 +734,7 @@ export function ThreeScene({ interactive = true, engine, library, freeCamera = f
       if (renderer.domElement.parentNode === container) container.removeChild(renderer.domElement);
       refs.current = null;
     };
-  }, [engine, library, onDebugState, freeCamera, themeId]);
+  }, [engine, library, onDebugState, onHoverControl, onProjectionUpdate, freeCamera, themeId]);
 
   useEffect(() => {
     showDebugRef.current = showDebug;

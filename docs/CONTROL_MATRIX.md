@@ -4,6 +4,36 @@ Source of truth: `ref/DDJ_FLX4_DRI1804A_manual.pdf` (Pioneer DJ, 165 pages).
 This file records the physical controls of the DDJ-FLX4 and the subset each
 milestone must support.
 
+## Phase 2 acceptance status
+
+This is the current tester-facing classification for visible 3D controls. It
+describes browser/3D semantic binding only; physical DDJ-FLX4 MIDI remains
+unverified.
+
+The same semantic IDs are used by `src/three/ddj-flx4/controlInfo.ts` for the
+projected control-label overlay, hover tooltip, and tester-mode status badges.
+
+| Visible control group | Status | Evidence / limitation |
+|---|---|---|
+| Play, pause, deck cue, shift, sync, loop in/out/4-beat | VERIFIED | Browser interaction and engine tests |
+| Loop call < / > | WORKING | Uses existing `LOOP_HALF` / `LOOP_DOUBLE` actions |
+| Tempo, jog platter/rim, pads, pad modes Hot Cue/Beat Jump/Sampler | VERIFIED | Browser interaction and engine tests |
+| Trim, EQ, CFX, master level, channel faders, crossfader | VERIFIED | Browser interaction and engine tests |
+| Beat FX select, beat -, beat +, target, level/depth, on/off | VERIFIED | Browser interaction and engine tests |
+| Smart CFX and Smart Fader | VERIFIED | Browser interaction and engine tests |
+| Load A/B | VERIFIED | Library load bridge is verified |
+| Browse encoder | IMPLEMENTED_NOT_BROWSER_VERIFIED | Library selection bridge exists; needs live browser library-scroll acceptance capture |
+| Channel cue 1 / 2 | UNBOUND_ENGINE_FEATURE | No headphone-monitor state or audio routing action exists |
+| Master cue | UNBOUND_ENGINE_FEATURE | No headphone-monitor state or audio routing action exists |
+| Headphones mix / level | UNBOUND_ENGINE_FEATURE | No headphone bus/state exists in the engine |
+| Mic level | UNBOUND_ENGINE_FEATURE | No microphone input path exists in the engine |
+| Pad FX mode 1 | NOT_IMPLEMENTED | Pad FX behavior is outside the current engine action model |
+| Physical DDJ-FLX4 MIDI for all controls | PHYSICAL_MIDI_UNVERIFIED | No physical controller was available |
+
+Controls marked `UNBOUND_ENGINE_FEATURE` or `NOT_IMPLEMENTED` are intentionally
+no-op and are called out in the label-assist overlay; they are not claimed as
+working.
+
 ## Deck section
 
 | # | Control | Primary | SHIFT+action |

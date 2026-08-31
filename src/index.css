@@ -1924,6 +1924,728 @@ body {
   }
 }
 
+/* Final M12F grid allocation must follow legacy studio overrides above. */
+.studio-app { grid-template-rows: 122px 44px minmax(0, 1fr); }
+.studio-app.focus-mode { grid-template-rows: 86px 44px minmax(0, 1fr); }
+
+@media (max-height: 820px) and (min-width: 901px) {
+  .studio-app { grid-template-rows: 122px 44px minmax(0, 1fr); }
+}
+
+/* Phase 2 final override: keep after all legacy milestone blocks. */
+.studio-app {
+  grid-template-rows: 122px 44px minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.studio-app.focus-mode {
+  grid-template-rows: 86px 40px minmax(0, 1fr);
+}
+
+.track-display-bar {
+  grid-template-columns: minmax(180px, 300px) minmax(0, 1fr) minmax(180px, 300px);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.track-meta {
+  flex-wrap: nowrap;
+}
+
+.studio-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.toolbar-left,
+.toolbar-right {
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.controller-stage {
+  height: calc(100dvh - 156px);
+  min-height: 0;
+  place-items: start center;
+}
+
+.controller-stage .three-scene-wrapper,
+.control-labels-overlay,
+.sticker-layer {
+  width: calc(100vw - 56px);
+  max-width: 1500px;
+  height: min(100%, 640px);
+}
+
+.control-labels-overlay,
+.sticker-layer {
+  position: absolute;
+  inset: auto;
+  top: 18px;
+  right: auto;
+  bottom: auto;
+  left: 50%;
+  overflow: hidden;
+  transform: translateX(-50%);
+}
+
+.control-labels-overlay {
+  z-index: 6;
+  pointer-events: none;
+}
+
+.control-label-callout {
+  display: inline-flex;
+  flex-direction: column;
+  max-width: none;
+  border-radius: 4px;
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+.mode-full .control-label-callout {
+  font-size: 10px;
+}
+
+.sticker-layer {
+  z-index: 5;
+  pointer-events: none;
+}
+
+.sticker-layer.editing {
+  pointer-events: auto;
+}
+
+.sticker-layer.normal .controller-sticker {
+  pointer-events: none;
+}
+
+.studio-drawer {
+  position: fixed;
+}
+
+.drawer-scrim,
+.transport-toast {
+  position: fixed;
+}
+
+@media (max-width: 1500px) {
+  .controller-stage .three-scene-wrapper,
+  .control-labels-overlay,
+  .sticker-layer {
+    width: calc(100vw - 44px);
+    height: min(100%, 580px);
+  }
+}
+
+@media (max-width: 1380px) {
+  .studio-app {
+    grid-template-rows: 122px 70px minmax(0, 1fr);
+  }
+
+  .track-display-bar {
+    grid-template-columns: minmax(150px, 238px) minmax(0, 1fr) minmax(150px, 238px);
+  }
+
+  .studio-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 70px;
+    align-content: center;
+    gap: 6px;
+  }
+
+  .toolbar-left,
+  .toolbar-right {
+    flex-wrap: wrap;
+  }
+
+  .controller-stage {
+    height: calc(100dvh - 192px);
+  }
+}
+
+@media (max-height: 820px) and (min-width: 901px) {
+  .studio-app,
+  .studio-app.focus-mode {
+    grid-template-rows: 104px 40px minmax(0, 1fr);
+  }
+
+  .controller-stage {
+    height: calc(100dvh - 144px);
+  }
+
+  .control-labels-overlay,
+  .sticker-layer {
+    top: 10px;
+  }
+}
+.studio-drawer,
+.drawer-scrim,
+.transport-toast {
+  position: fixed;
+}
+
+/* Phase 2 final override: this must remain after legacy M12F/M12D blocks. */
+.studio-app {
+  grid-template-rows: minmax(112px, auto) minmax(44px, auto) minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.studio-app.focus-mode {
+  grid-template-rows: minmax(86px, auto) minmax(40px, auto) minmax(0, 1fr);
+}
+
+.track-display-bar {
+  grid-template-columns: minmax(180px, 300px) minmax(0, 1fr) minmax(180px, 300px);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.studio-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.toolbar-left,
+.toolbar-right {
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.controller-stage {
+  place-items: start center;
+}
+
+.controller-stage .three-scene-wrapper,
+.control-labels-overlay,
+.sticker-layer {
+  width: calc(100vw - 56px);
+  max-width: 1500px;
+  height: min(100%, 640px);
+}
+
+.control-labels-overlay,
+.sticker-layer {
+  position: absolute;
+  inset: auto;
+  top: 18px;
+  right: auto;
+  bottom: auto;
+  left: 50%;
+  overflow: hidden;
+  transform: translateX(-50%);
+}
+
+.control-labels-overlay {
+  z-index: 6;
+  pointer-events: none;
+}
+
+.control-label-callout {
+  display: inline-flex;
+  flex-direction: column;
+  max-width: none;
+  border-radius: 4px;
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+.mode-full .control-label-callout {
+  font-size: 10px;
+}
+
+.sticker-layer {
+  z-index: 5;
+  pointer-events: none;
+}
+
+.sticker-layer.editing {
+  pointer-events: auto;
+}
+
+.sticker-layer.normal .controller-sticker {
+  pointer-events: none;
+}
+
+.studio-drawer,
+.drawer-scrim,
+.transport-toast {
+  position: fixed;
+}
+
+@media (max-width: 1500px) {
+  .controller-stage .three-scene-wrapper,
+  .control-labels-overlay,
+  .sticker-layer {
+    width: calc(100vw - 44px);
+    height: min(100%, 580px);
+  }
+}
+
+@media (max-width: 1380px) {
+  .track-display-bar {
+    grid-template-columns: minmax(150px, 238px) minmax(0, 1fr) minmax(150px, 238px);
+  }
+
+  .studio-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-height: 820px) and (min-width: 901px) {
+  .studio-app,
+  .studio-app.focus-mode {
+    grid-template-rows: minmax(104px, auto) minmax(40px, auto) minmax(0, 1fr);
+  }
+
+  .control-labels-overlay,
+  .sticker-layer {
+    top: 10px;
+  }
+}
+
+/* Phase 2: stable header, projected control labels, and controller-bound stickers. */
+.studio-app {
+  grid-template-rows: minmax(112px, auto) minmax(44px, auto) minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.studio-app.focus-mode {
+  grid-template-rows: minmax(86px, auto) minmax(40px, auto) minmax(0, 1fr);
+}
+
+.track-display-bar {
+  display: grid;
+  grid-template-columns: minmax(180px, 300px) minmax(0, 1fr) minmax(180px, 300px);
+  align-items: stretch;
+  min-width: 0;
+  min-height: 0;
+  padding: 10px 20px 8px;
+  overflow: hidden;
+}
+
+.track-display,
+.combined-waveform-area,
+.waveform-lane,
+.waveform-container,
+.deck-overview-waveform {
+  min-width: 0;
+}
+
+.track-display {
+  grid-template-rows: auto minmax(17px, auto) auto auto minmax(18px, 22px);
+  gap: 4px;
+  overflow: hidden;
+}
+
+.track-title,
+.track-artist {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.bpm-badge,
+.time-pair span {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.time-pair {
+  display: inline-flex;
+  gap: 9px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.studio-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  gap: 12px;
+  padding: 6px 20px;
+  overflow: hidden;
+}
+
+.toolbar-left,
+.toolbar-right {
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.toolbar-left {
+  overflow: hidden;
+}
+
+.toolbar-button,
+.toolbar-count,
+.toolbar-midi {
+  flex: 0 0 auto;
+}
+
+.controller-stage {
+  display: grid;
+  place-items: start center;
+  min-height: 0;
+  padding: 16px 28px 22px;
+  background:
+    radial-gradient(ellipse 72% 30% at 50% 77%, rgba(255, 255, 255, 0.075), transparent 68%),
+    radial-gradient(ellipse 72% 40% at 50% 54%, rgba(246, 163, 58, 0.105), transparent 64%),
+    linear-gradient(180deg, #080a0d 0%, #050607 64%, #030404 100%);
+}
+
+.controller-stage .three-scene-wrapper,
+.control-labels-overlay,
+.sticker-layer {
+  width: calc(100vw - 56px);
+  max-width: 1500px;
+  height: min(100%, 640px);
+}
+
+.control-labels-overlay,
+.sticker-layer {
+  position: absolute;
+  inset: auto;
+  top: 16px;
+  right: auto;
+  bottom: auto;
+  left: 50%;
+  z-index: 6;
+  overflow: hidden;
+  transform: translateX(-50%);
+}
+
+.control-labels-overlay {
+  pointer-events: none;
+}
+
+.control-label-callout {
+  position: absolute;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  padding: 3px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 4px;
+  background: rgba(3, 5, 8, 0.86);
+  color: #f6f2e9;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.42);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: 0;
+  text-align: center;
+  text-transform: uppercase;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
+
+.mode-full .control-label-callout {
+  font-size: 10px;
+  min-height: 20px;
+  padding: 3px 6px;
+}
+
+.control-label-callout.deck-a { border-color: rgba(90, 174, 255, 0.74); color: #d3ebff; }
+.control-label-callout.deck-b { border-color: rgba(255, 108, 168, 0.74); color: #ffd8e7; }
+.control-label-callout.mixer { border-color: rgba(246, 163, 58, 0.68); color: #ffe1ad; }
+.control-label-callout.fx { border-color: rgba(166, 235, 196, 0.64); color: #d7ffe8; }
+.control-label-callout.browse { border-color: rgba(221, 229, 240, 0.58); color: #eef4ff; }
+
+.control-label-callout.unsupported {
+  border-style: dashed;
+  border-color: rgba(255, 132, 132, 0.8);
+  color: #ffc9c9;
+  opacity: 0.88;
+}
+
+.control-label-status {
+  margin-top: 2px;
+  color: #aeb8c5;
+  font-size: 8px;
+  font-weight: 750;
+}
+
+.control-hover-tooltip {
+  position: absolute;
+  z-index: 7;
+  display: grid;
+  gap: 2px;
+  min-width: 132px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 5px;
+  background: rgba(5, 7, 10, 0.94);
+  color: #eef2f7;
+  font-size: 11px;
+  line-height: 1.2;
+  transform: translate(14px, -50%);
+  white-space: nowrap;
+}
+
+.control-hover-tooltip strong {
+  font-size: 12px;
+}
+
+.control-hover-tooltip.unsupported {
+  border-color: rgba(255, 132, 132, 0.65);
+}
+
+.control-labels-note {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 3px 6px;
+  border-radius: 3px;
+  background: rgba(5, 7, 10, 0.78);
+  color: #b8bec7;
+  font-size: 9px;
+}
+
+.sticker-layer {
+  pointer-events: none;
+  z-index: 5;
+}
+
+.sticker-layer.editing {
+  pointer-events: auto;
+}
+
+.sticker-layer.normal .controller-sticker {
+  pointer-events: none;
+}
+
+.controller-sticker {
+  border-radius: 8px;
+  pointer-events: auto;
+  transition: filter 160ms ease, transform 160ms ease, outline-color 160ms ease;
+  will-change: transform, filter;
+}
+
+.controller-sticker.selected {
+  outline: 2px solid rgba(246, 163, 58, 0.92);
+  outline-offset: 5px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+}
+
+.controller-sticker.dragging {
+  filter: drop-shadow(0 24px 34px rgba(0, 0, 0, 0.58));
+}
+
+.controller-sticker.finish-matte::after {
+  opacity: 0.18;
+}
+
+.controller-sticker.finish-glossy::after {
+  opacity: 1;
+}
+
+.controller-sticker.finish-holographic::after {
+  background:
+    linear-gradient(110deg, rgba(255, 255, 255, 0.28), transparent 28%),
+    linear-gradient(55deg, rgba(110, 190, 255, 0.22), rgba(255, 130, 210, 0.18), rgba(255, 220, 120, 0.16));
+  opacity: calc(0.45 + var(--sticker-gloss) * 0.42);
+}
+
+.sticker-adjustments {
+  grid-template-columns: repeat(4, minmax(190px, 1fr)) auto;
+}
+
+.sticker-adjustments select {
+  min-height: 32px;
+  border: 1px solid var(--studio-line);
+  border-radius: 4px;
+  background: #0d1117;
+  color: var(--studio-text);
+}
+
+@media (max-width: 1500px) {
+  .controller-stage .three-scene-wrapper,
+  .control-labels-overlay,
+  .sticker-layer {
+    width: calc(100vw - 44px);
+    height: min(100%, 580px);
+  }
+}
+
+@media (max-width: 1380px) {
+  .track-display-bar {
+    grid-template-columns: minmax(150px, 238px) minmax(0, 1fr) minmax(150px, 238px);
+    gap: 10px;
+    padding-inline: 14px;
+  }
+
+  .track-title {
+    font-size: 14px;
+  }
+
+  .studio-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+
+  .toolbar-right {
+    justify-content: flex-start;
+    overflow: hidden;
+  }
+}
+
+@media (max-height: 820px) and (min-width: 901px) {
+  .studio-app,
+  .studio-app.focus-mode {
+    grid-template-rows: minmax(104px, auto) minmax(40px, auto) minmax(0, 1fr);
+  }
+
+  .track-display-bar {
+    padding-block: 7px;
+  }
+
+  .controller-stage {
+    padding-block: 10px 14px;
+  }
+
+  .controller-stage .three-scene-wrapper,
+  .control-labels-overlay,
+  .sticker-layer {
+    height: min(100%, 540px);
+  }
+
+  .control-labels-overlay,
+  .sticker-layer {
+    top: 10px;
+  }
+}
+
+/* M12F acceptance labeling and compact responsive header. */
+.studio-app {
+  grid-template-rows: 122px 44px minmax(0, 1fr);
+}
+
+.studio-app.focus-mode {
+  grid-template-rows: 86px 44px minmax(0, 1fr);
+}
+
+.track-display-bar {
+  grid-template-columns: minmax(190px, 0.9fr) minmax(420px, 2fr) minmax(190px, 0.9fr);
+  min-height: 122px;
+  height: auto;
+  overflow: visible;
+}
+
+.track-display {
+  min-height: 100px;
+}
+
+.combined-waveform-area {
+  min-height: 96px;
+}
+
+.studio-toolbar {
+  position: relative;
+  z-index: 3;
+  flex-wrap: wrap;
+}
+
+.toolbar-left,
+.toolbar-right {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.controller-stage {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.control-labels-overlay {
+  position: absolute;
+  inset: 18px max(28px, calc((100vw - 1500px) / 2 + 28px)) 24px;
+  z-index: 4;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.control-label-callout {
+  position: absolute;
+  max-width: 20%;
+  padding: 3px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 3px;
+  background: rgba(5, 7, 10, 0.82);
+  color: #f4f1ea;
+  font-size: clamp(8px, 0.58vw, 11px);
+  font-weight: 750;
+  line-height: 1.15;
+  letter-spacing: 0.04em;
+  text-align: center;
+  text-transform: uppercase;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
+
+.control-label-callout.deck-a { border-color: rgba(90, 174, 255, 0.62); color: #c7e4ff; }
+.control-label-callout.deck-b { border-color: rgba(255, 108, 168, 0.62); color: #ffd0e2; }
+.control-label-callout.mixer { border-color: rgba(246, 163, 58, 0.58); color: #ffe0ad; }
+.control-label-callout.unsupported { max-width: 94%; border-color: rgba(255, 138, 138, 0.72); color: #ffc0c0; font-size: clamp(8px, 0.55vw, 10px); }
+
+.control-labels-note {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 3px 6px;
+  background: rgba(5, 7, 10, 0.78);
+  color: #b8bec7;
+  font-size: 9px;
+}
+
+@media (max-width: 1500px) {
+  .track-display-bar {
+    grid-template-columns: minmax(170px, 0.85fr) minmax(360px, 2fr) minmax(170px, 0.85fr);
+    gap: 10px;
+    padding-inline: 16px;
+  }
+
+  .control-labels-overlay {
+    inset-inline: 22px;
+  }
+}
+
+@media (max-width: 1200px) {
+  .track-display-bar {
+    grid-template-columns: minmax(150px, 0.8fr) minmax(300px, 2fr) minmax(150px, 0.8fr);
+    gap: 8px;
+  }
+
+  .track-title { font-size: 14px; }
+  .control-label-callout { max-width: 24%; }
+}
+
+@media (max-width: 900px) {
+  .track-display-bar { grid-template-columns: 1fr; min-height: 0; }
+  .track-display { min-height: 0; }
+  .combined-waveform-area { min-height: 90px; }
+  .control-labels-overlay { inset: 12px 16px 18px; }
+  .control-label-callout { max-width: 36%; }
+}
+
+@media (max-height: 820px) and (min-width: 901px) {
+  .studio-app { grid-template-rows: 122px 44px minmax(0, 1fr); }
+}
+
 @media (max-height: 820px) and (min-width: 901px) {
   .track-display-bar {
     height: 108px;
@@ -2719,4 +3441,153 @@ input[type=range] {
   .controller-stage {
     height: auto;
   }
+}
+
+/* Final M12F grid allocation follows all legacy studio overrides. */
+.studio-app { grid-template-rows: 122px 44px minmax(0, 1fr); }
+.studio-app.focus-mode { grid-template-rows: 86px 44px minmax(0, 1fr); }
+
+@media (max-height: 820px) and (min-width: 901px) {
+  .studio-app { grid-template-rows: 122px 44px minmax(0, 1fr); }
+}
+
+/* Phase 2 final override: keep after all legacy milestone blocks. */
+.studio-app {
+  grid-template-rows: 122px 44px minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.studio-app.focus-mode {
+  grid-template-rows: 86px 40px minmax(0, 1fr);
+}
+
+.track-display-bar {
+  grid-template-columns: minmax(180px, 300px) minmax(0, 1fr) minmax(180px, 300px);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.track-meta {
+  flex-wrap: nowrap;
+}
+
+.studio-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.toolbar-left,
+.toolbar-right {
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.controller-stage {
+  height: calc(100dvh - 166px);
+  min-height: 0;
+  place-items: start center;
+}
+
+.controller-stage .three-scene-wrapper,
+.control-labels-overlay,
+.sticker-layer {
+  width: calc(100vw - 56px);
+  max-width: 1500px;
+  height: min(100%, 640px);
+}
+
+.control-labels-overlay,
+.sticker-layer {
+  position: absolute;
+  inset: auto;
+  top: 18px;
+  right: auto;
+  bottom: auto;
+  left: 50%;
+  overflow: hidden;
+  transform: translateX(-50%);
+}
+
+.control-labels-overlay {
+  z-index: 6;
+  pointer-events: none;
+}
+
+.control-label-callout {
+  display: inline-flex;
+  flex-direction: column;
+  max-width: none;
+  border-radius: 4px;
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+.mode-full .control-label-callout {
+  font-size: 10px;
+}
+
+.sticker-layer {
+  z-index: 5;
+  pointer-events: none;
+}
+
+.sticker-layer.editing {
+  pointer-events: auto;
+}
+
+.sticker-layer.normal .controller-sticker {
+  pointer-events: none;
+}
+
+@media (max-width: 1500px) {
+  .controller-stage .three-scene-wrapper,
+  .control-labels-overlay,
+  .sticker-layer {
+    width: calc(100vw - 44px);
+    height: min(100%, 580px);
+  }
+}
+
+@media (max-width: 1380px) {
+  .track-display-bar {
+    grid-template-columns: minmax(150px, 238px) minmax(0, 1fr) minmax(150px, 238px);
+  }
+
+  .studio-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-height: 820px) and (min-width: 901px) {
+  .studio-app,
+  .studio-app.focus-mode {
+    grid-template-rows: 104px 40px minmax(0, 1fr);
+  }
+
+  .controller-stage {
+    height: calc(100dvh - 144px);
+  }
+
+  .control-labels-overlay,
+  .sticker-layer {
+    top: 10px;
+  }
+}
+
+@media (max-width: 1380px) and (max-height: 820px) {
+  .studio-app,
+  .studio-app.focus-mode {
+    grid-template-rows: 104px 70px minmax(0, 1fr);
+  }
+
+  .controller-stage {
+    height: calc(100dvh - 174px);
+  }
+}
+
+.studio-drawer,
+.drawer-scrim,
+.transport-toast {
+  position: fixed;
 }
