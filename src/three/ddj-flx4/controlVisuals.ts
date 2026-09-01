@@ -7,18 +7,29 @@ import type { RuntimeControl } from "./controlRegistry";
 
 // Cloned-once material cache. We mutate emissiveIntensity to light pads/buttons
 // without allocating new materials each frame.
-const LIT_INTENSITY = 0.9;
+const PAD_LIT_INTENSITY = 1.1;      // pads glow brightly when active
+const BUTTON_LIT_INTENSITY = 0.95;  // transport/mode buttons when active
 const UNLIT_INTENSITY = 0.0;
 const PRESS_DEPTH = 0.0025; // metres of travel when a button/pad is pressed
+
+// Active emissive colors — distinguishable by control type
+const PAD_LIT_COLOR    = 0xff6a00;  // orange
+const BUTTON_LIT_COLOR = 0xff6a00;  // orange (same family, consistent)
+const PLAY_LIT_COLOR   = 0x22dd66;  // green — playing state is distinctive
 
 type LitClone = THREE.MeshStandardMaterial & { __litOwner?: THREE.Mesh };
 type HoverMesh = THREE.Mesh & { __hoverBaseMaterial?: THREE.Material | THREE.Material[] };
 
-function ensureMaterialClone(mesh: THREE.Mesh): THREE.MeshStandardMaterial {
+/** Resolve whether this control's id is a PLAY button. */
+function isPlayControl(control: RuntimeControl): boolean {
+  return control.id === "deck.left.play" || control.id === "deck.right.play";
+}
+
+function ensureMaterialClone(mesh: THREE.Mesh, emissiveColor: number): THREE.MeshStandardMaterial {
   const cached = (mesh as THREE.Mesh & { __litClone?: LitClone }).__litClone;
   if (cached) return cached;
   const cloned = (mesh.material as THREE.MeshStandardMaterial).clone();
-  cloned.emissive = new THREE.Color(0xff6a00);
+  cloned.emissive = new THREE.Color(emissiveColor);
   cloned.emissiveIntensity = UNLIT_INTENSITY;
   (mesh as THREE.Mesh & { __litClone?: LitClone }).__litClone = cloned;
   mesh.material = cloned;
@@ -27,8 +38,12 @@ function ensureMaterialClone(mesh: THREE.Mesh): THREE.MeshStandardMaterial {
 
 export function setControlLit(control: RuntimeControl, lit: boolean): void {
   if (!control.litMesh) return;
-  const mat = ensureMaterialClone(control.litMesh);
-  mat.emissiveIntensity = lit ? LIT_INTENSITY : UNLIT_INTENSITY;
+  const color = isPlayControl(control) ? PLAY_LIT_COLOR : (control.kind === "pad" ? PAD_LIT_COLOR : BUTTON_LIT_COLOR);
+  const intensity = control.kind === "pad" ? PAD_LIT_INTENSITY : BUTTON_LIT_INTENSITY;
+  const mat = ensureMaterialClone(control.litMesh, color);
+  // Update emissive color each time in case theme changed
+  mat.emissive.setHex(color);
+  mat.emissiveIntensity = lit ? intensity : UNLIT_INTENSITY;
 }
 
 export function setControlPressed(control: RuntimeControl, pressed: boolean): void {
@@ -54,10 +69,12 @@ export function setControlHovered(control: RuntimeControl, hovered: boolean): vo
       const sourceMaterials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       const hoverMaterials = sourceMaterials.map((source) => {
         const clone = source.clone() as THREE.Material & { color?: THREE.Color; emissive?: THREE.Color; emissiveIntensity?: number };
-        if (clone.color) clone.color.lerp(new THREE.Color(0xffffff), 0.1);
+        // Lift color toward white slightly more than before for clarity
+        if (clone.color) clone.color.lerp(new THREE.Color(0xffffff), 0.14);
         if (clone.emissive && clone.emissiveIntensity !== undefined) {
-          clone.emissive.lerp(new THREE.Color(0xaec2d6), 0.25);
-          clone.emissiveIntensity = Math.min(0.55, clone.emissiveIntensity + 0.12);
+          // Shift toward a warm highlight on hover
+          clone.emissive.lerp(new THREE.Color(0xb8cce0), 0.30);
+          clone.emissiveIntensity = Math.min(0.68, clone.emissiveIntensity + 0.18);
         }
         return clone;
       });

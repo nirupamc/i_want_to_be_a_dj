@@ -15,10 +15,11 @@ import {
   createControllerPresentationRoot,
   fitCameraToController
 } from "./presentation";
-import type { DJEngineHandle } from "../../types";
-import { applyForcedMaterialProbe, auditVisibleMaterials, calibrateControllerMaterials } from "./visualCalibration";
+import type { DJEngineHandle, DJState } from "../../types";
+import { applyForcedMaterialProbe, auditVisibleMaterials, calibrateControllerMaterials, applyMaterialDebug } from "./visualCalibration";
 import { getControllerTheme, type ControllerThemeId } from "../../customization/controllerCustomization";
 import { getJogPlaybackAngle, shouldManualOwnJogVisual } from "./jogPlaybackRotation";
+import { createSurfaceLabels, type SurfaceLabels } from "./SurfaceLabels";
 
 export interface ThreeSceneProps {
   /** When true the scene renders a "loading" label only — useful for tests. */
@@ -89,6 +90,9 @@ interface SceneRefs {
   jogVisuals: JogVisualRefs | null;
   hoveredVisualId: string | null;
   textureAudit: { maxAnisotropy: number };
+  /** GLB meter segment meshes indexed [channelIndex 0|1][segmentIndex 0-7] */
+  meterMeshes: Array<Array<THREE.Mesh>>;
+  surfaceLabels: SurfaceLabels | null;
 }
 
 interface JogVisualTarget {
@@ -206,7 +210,7 @@ function tuneTextureQuality(root: THREE.Object3D, maxAnisotropy: number): void {
     }
   });
   for (const texture of textures) {
-    texture.anisotropy = Math.min(maxAnisotropy, 8);
+    texture.anisotropy = Math.min(maxAnisotropy, 16);
     texture.minFilter = THREE.LinearMipmapLinearFilter;
     texture.magFilter = THREE.LinearFilter;
     texture.generateMipmaps = true;
@@ -261,6 +265,104 @@ function jogVisualForId(visuals: JogVisualRefs | null, id: string): JogVisualTar
   return null;
 }
 
+// ── Studio environment texture ─────────────────────────────────────────────
+// Builds a minimal 64×32 equirectangular DataTexture simulating a neutral
+// product-photography studio (soft white box + floor + warm key reflection).
+// No network dependency. The PMREMGenerator converts this to an IBL cube map.
+function buildStudioEnvTexture(): THREE.DataTexture {
+  const W = 64, H = 32;
+  const data = new Uint8Array(W * H * 4);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      // Map pixel to spherical coords
+      const phi = (y / H) * Math.PI;           // 0..π (top to bottom)
+      const theta = (x / W) * 2 * Math.PI;    // 0..2π
+      const cosP = Math.cos(phi);
+      // Sky dome: bright neutral overhead, warm key zone upper-left-front
+      const isUpper = phi < Math.PI * 0.45;
+      const isKeyZone = theta > Math.PI * 1.2 && theta < Math.PI * 1.7 && phi < Math.PI * 0.35;
+      const isFrontFill = phi > Math.PI * 0.4 && phi < Math.PI * 0.65 && theta > Math.PI * 0.1 && theta < Math.PI * 0.9;
+      const isFloor = phi > Math.PI * 0.72;
+      let r = 18, g = 20, b = 26;  // dark ambient default
+      if (isKeyZone) { r = 200; g = 188; b = 168; }   // warm key reflection zone
+      else if (isUpper) { r = 90; g = 96; b = 108; }  // cool upper sky
+      else if (isFrontFill) { r = 56; g = 66; b = 80; } // front fill zone
+      else if (isFloor) { r = 8; g = 10; b = 14; }    // dark floor
+      // Smooth with cosine of polar angle for continuity
+      const blend = Math.max(0, Math.min(1, 0.5 + cosP * 0.3));
+      r = Math.round(r * blend + 12 * (1 - blend));
+      g = Math.round(g * blend + 14 * (1 - blend));
+      b = Math.round(b * blend + 18 * (1 - blend));
+      data[i]     = Math.min(255, r);
+      data[i + 1] = Math.min(255, g);
+      data[i + 2] = Math.min(255, b);
+      data[i + 3] = 255;
+    }
+  }
+  const tex = new THREE.DataTexture(data, W, H, THREE.RGBAFormat);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+// ── Apply environment map to all mesh materials ───────────────────────────
+function applyEnvMapToModel(root: THREE.Object3D, envMap: THREE.Texture): void {
+  root.traverse((object) => {
+    if (!(object as THREE.Mesh).isMesh) return;
+    const mesh = object as THREE.Mesh;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const mat of mats) {
+      const m = mat as THREE.MeshStandardMaterial;
+      if (m.isMeshStandardMaterial) {
+        m.envMap = envMap;
+        m.envMapIntensity = m.metalness > 0.3 ? 1.35 : 0.70;
+        m.needsUpdate = true;
+      }
+    }
+  });
+}
+
+// ── GLB meter segment material init and update ────────────────────────────
+const METER_COLORS_UNLIT = [0x1a2820, 0x1a2820, 0x1a2820, 0x1a2820, 0x1a2820, 0x1a2820, 0x252018, 0x2a1818] as const;
+const METER_COLORS_LIT   = [0x00e060, 0x00e060, 0x00e060, 0x00e060, 0x20e040, 0x50cc20, 0xe0a000, 0xe03010] as const;
+
+function initMeterSegmentMaterial(mesh: THREE.Mesh, segIndex: number): void {
+  const mat = new THREE.MeshStandardMaterial({
+    color: METER_COLORS_UNLIT[segIndex] ?? 0x1a2820,
+    emissive: new THREE.Color(METER_COLORS_UNLIT[segIndex] ?? 0x1a2820),
+    emissiveIntensity: 0.3,
+    roughness: 0.55,
+    metalness: 0.05,
+    toneMapped: false,
+  });
+  mesh.material = mat;
+  mesh.castShadow = false;
+}
+
+function updateMeterSegments(meterMeshes: Array<Array<THREE.Mesh>>, state: DJState): void {
+  for (let ch = 0; ch < 2; ch++) {
+    const level = state.mixer.channels[ch]?.meter ?? 0;
+    const litCount = Math.round(level * 8);
+    const segs = meterMeshes[ch];
+    for (let seg = 0; seg < 8; seg++) {
+      const mesh = segs[seg];
+      if (!mesh) continue;
+      const mat = mesh.material as THREE.MeshStandardMaterial;
+      if (seg < litCount) {
+        mat.color.setHex(METER_COLORS_LIT[seg] ?? 0x00e060);
+        mat.emissive.setHex(METER_COLORS_LIT[seg] ?? 0x00e060);
+        mat.emissiveIntensity = 1.4;
+      } else {
+        mat.color.setHex(METER_COLORS_UNLIT[seg] ?? 0x1a2820);
+        mat.emissive.setHex(METER_COLORS_UNLIT[seg] ?? 0x1a2820);
+        mat.emissiveIntensity = 0.3;
+      }
+    }
+  }
+}
+
 export function ThreeScene({
   interactive = true,
   engine,
@@ -308,21 +410,80 @@ export function ThreeScene({
     const initialSize = containerSize(container);
     renderer.setSize(initialSize.w, initialSize.h, false);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = theme.exposure;
+    // NeutralToneMapping preserves dark values better than ACES for black hardware.
+    // ACES crushes values < 0.2 to near-black; Neutral maps more linearly in
+    // the shadow range, so the controller's mid-dark plastic surfaces stay visible.
+    renderer.toneMapping = THREE.NeutralToneMapping;
+    renderer.toneMappingExposure = 1.7; // Neutral exposure for realistic look
+    // Shadows: soft directional shadow from the key light gives depth cues
+    // without heavy GPU cost. PCFSoft produces acceptable penumbra.
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(renderer.domElement);
     canvasRef.current = renderer.domElement;
 
-    scene.add(new THREE.HemisphereLight(0xf0f6ff, 0x0a0d12, 0.74));
-    const key = new THREE.DirectionalLight(0xffffff, 2.35);
-    key.position.set(-0.55, 1.55, -0.62);
+    // ── Build a synthetic studio environment map ──────────────────────────
+    // This gives metallic/glossy surfaces something to reflect without any
+    // network dependency. We paint an equirectangular image on a DataTexture
+    // then process it through PMREMGenerator.
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    pmrem.compileEquirectangularShader();
+    const envTexture = buildStudioEnvTexture();
+    const envMap = pmrem.fromEquirectangular(envTexture).texture;
+    pmrem.dispose();
+    envTexture.dispose();
+    scene.environment = envMap;
+    // environmentIntensity available in Three.js r158+; guard with optional cast
+    if ('environmentIntensity' in scene) (scene as THREE.Scene & { environmentIntensity: number }).environmentIntensity = 0.72;
+
+    // ── Product photography lighting rig ─────────────────────────────────
+    // Goal: premium dark hardware photographed in a controlled studio.
+    // Key: broad soft source from upper-left-front (hits both top and front face)
+    // Fill: weaker opposite side, prevents total shadow on right deck
+    // Rim: back-right edge separation
+    // Front-low: lifts pads/buttons/faders on the near face (-Z front)
+    // Hemisphere: gentle sky/ground ambient, never too bright
+
+    // Hemisphere — warm neutral sky, near-black ground
+    scene.add(new THREE.HemisphereLight(0xe8eef6, 0x0a0c10, 1.0));
+
+    // Key light — upper left, angled to hit both the top surface and the
+    // front-facing controls. Position is relative to controller space where
+    // Y is up, -Z is the front (pad/button) face.
+    const key = new THREE.DirectionalLight(0xfff8f0, 3.6);
+    key.position.set(-0.8, 1.4, 0.9);   // left, above, in front → illuminates top + near face
+    key.castShadow = true;
+    key.shadow.mapSize.set(1024, 1024);
+    key.shadow.camera.near = 0.01;
+    key.shadow.camera.far = 8;
+    key.shadow.camera.left = -0.8;
+    key.shadow.camera.right = 0.8;
+    key.shadow.camera.top = 0.5;
+    key.shadow.camera.bottom = -0.5;
+    key.shadow.bias = -0.001;
+    key.shadow.radius = 3;  // soft penumbra
     scene.add(key);
-    const fill = new THREE.DirectionalLight(themeId === 'accent-neon' ? 0xffb16d : 0x9ec6ff, 0.82);
-    fill.position.set(0.75, 0.9, 0.5);
+
+    // Fill — right side, weaker, cool-tinted
+    const fill = new THREE.DirectionalLight(0xa8c4e0, 0.82);
+    fill.position.set(1.0, 0.8, 0.4);
     scene.add(fill);
-    const rim = new THREE.DirectionalLight(new THREE.Color(theme.accent), 0.62);
-    rim.position.set(0, 0.65, 1.1);
+
+    // Rim — back-right, creates edge separation on jog rims and chassis edges
+    const rim = new THREE.DirectionalLight(new THREE.Color(theme.accent).lerp(new THREE.Color(0xc0d4e8), 0.6), 1.0);
+    rim.position.set(0.5, 0.6, -1.2);   // behind and to the right
     scene.add(rim);
+
+    // Front-low — lifts the near face where pads/faders/buttons live.
+    // This is the light that was missing in Pass 2.
+    const frontLow = new THREE.DirectionalLight(0xd8e8f4, 1.08);
+    frontLow.position.set(0.0, 0.2, 2.0);  // almost directly in front, slightly below camera
+    scene.add(frontLow);
+
+    // Front-center soft overhead — supplements key on the mixer center strip
+    const topCenter = new THREE.DirectionalLight(0xfaf8f4, 1.45);
+    topCenter.position.set(0.0, 2.0, 0.2);  // directly above, slight forward tilt
+    scene.add(topCenter);
 
     const refsLocal: SceneRefs = {
       renderer,
@@ -336,7 +497,9 @@ export function ThreeScene({
       modelBox: null,
       jogVisuals: null,
       hoveredVisualId: null,
-      textureAudit: { maxAnisotropy: renderer.capabilities.getMaxAnisotropy() }
+      textureAudit: { maxAnisotropy: renderer.capabilities.getMaxAnisotropy() },
+      meterMeshes: [[], []],
+      surfaceLabels: null,
     };
     refs.current = refsLocal;
 
@@ -368,7 +531,11 @@ export function ThreeScene({
         const materialCalibration = calibrateControllerMaterials(model, !originalMaterials, themeId);
         const materialProbe = import.meta.env.DEV && new URLSearchParams(window.location.search).get("materialProbe") === "forced";
         if (materialProbe) applyForcedMaterialProbe(model);
+        const materialDebug = import.meta.env.DEV && new URLSearchParams(window.location.search).get("materialDebug") === "forced";
+        if (materialDebug) applyMaterialDebug(model);
         tuneTextureQuality(model, renderer.capabilities.getMaxAnisotropy());
+        // Propagate environment map to all materials that can use it
+        applyEnvMapToModel(model, envMap);
         model.name = "DDJ_FLX4_LoadedRoot";
         const presentationRoot = createControllerPresentationRoot(model);
         scene.add(presentationRoot);
@@ -379,6 +546,30 @@ export function ThreeScene({
         const { controls } = buildControlRegistry(model);
         refsLocal.controls = controls;
         resetAll(Object.values(controls));
+
+        // ── Wire GLB meter segment meshes ──────────────────────────────────
+        // StaticLevelMeter_-4_{0-7} = Channel A (left deck)
+        // StaticLevelMeter_4_{0-7}  = Channel B (right deck)
+        const meterSegments: Array<Array<THREE.Mesh>> = [[], []];
+        for (let seg = 0; seg < 8; seg++) {
+          const meshA = model.getObjectByName(`StaticLevelMeter_-4_${seg}`) as THREE.Mesh | undefined;
+          const meshB = model.getObjectByName(`StaticLevelMeter_4_${seg}`) as THREE.Mesh | undefined;
+          if (meshA?.isMesh) {
+            meterSegments[0][seg] = meshA;
+            initMeterSegmentMaterial(meshA, seg);
+          }
+          if (meshB?.isMesh) {
+            meterSegments[1][seg] = meshB;
+            initMeterSegmentMaterial(meshB, seg);
+          }
+        }
+        refsLocal.meterMeshes = meterSegments;
+
+        // ── Initialize 3D surface labels ──────────────────────────────────
+        // Crisp SDF text labels attached directly to controller geometry
+        const surfaceLabelsEnabled = !new URLSearchParams(window.location.search).has('noSurfaceLabels')
+        refsLocal.surfaceLabels = createSurfaceLabels(model, surfaceLabelsEnabled)
+
         refsLocal.jogVisuals = {
           left: createJogVisualTarget(model, "LeftJogWheelVisual"),
           right: createJogVisualTarget(model, "RightJogWheelVisual"),
@@ -713,6 +904,8 @@ export function ThreeScene({
     const tick = (): void => {
       frame += 1;
       updateJogPlaybackVisuals();
+      // Update GLB meter segments from real channel peak data
+      updateMeterSegments(refsLocal.meterMeshes, engine.getState());
       renderer.render(scene, camera);
       rafRef.current = requestAnimationFrame(tick);
     };
@@ -730,7 +923,9 @@ export function ThreeScene({
       refsLocal.controller?.releaseDrag();
       refsLocal.controller?.detach();
       refsLocal.stateSync?.stop();
+      refsLocal.surfaceLabels?.dispose();
       renderer.dispose();
+      envMap.dispose();
       if (renderer.domElement.parentNode === container) container.removeChild(renderer.domElement);
       refs.current = null;
     };

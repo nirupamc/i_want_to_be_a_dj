@@ -293,12 +293,20 @@ function makeButton(id: string, objectName: string, root: THREE.Object3D, contro
   }
   // The pressable mesh sits one level below (e.g. LeftPlayPauseMesh).
   const pressMesh = firstDescendantMesh(obj) ?? undefined;
+  // Buttons light up via their top-cap mesh if the GLB provides one.
+  // Priority: {Name}Top > {Name}Body > first descendant mesh (fallback)
+  const litMesh =
+    (firstByName(root, `${objectName}Top`) as THREE.Mesh | null) ??
+    (firstByName(root, `${objectName}Body`) as THREE.Mesh | null) ??
+    (pressMesh as THREE.Mesh | null) ??
+    undefined;
   add(
     {
       id,
       kind: "button",
       object: obj,
       pressMesh,
+      litMesh: litMesh ?? undefined,
       defaultValue: false
     },
     controls,

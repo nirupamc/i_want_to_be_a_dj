@@ -13,6 +13,7 @@ import type { DeckState } from './types'
 import { isEditableTarget } from './input/keyboard'
 import { formatRemaining, formatTime } from './selectors/deckDisplay'
 import { StickerLayer } from './customization/StickerLayer'
+import { DeckMeter } from './components/DeckMeter'
 import { ControlLabelsOverlay, type ControlLabelMode } from './components/ControlLabelsOverlay'
 import {
   CONTROLLER_THEMES,
@@ -34,11 +35,13 @@ type SettingsTab = 'audio' | 'appearance' | 'customization' | 'midi' | 'develope
 function DeckTrackDisplay({
   deck,
   side,
+  meterLevel,
   waveformData,
   onSeek,
 }: {
   deck: DeckState
   side: 'left' | 'right'
+  meterLevel: number
   waveformData: ReturnType<DJEngineHandle['getWaveform']>
   onSeek: (seconds: number) => void
 }) {
@@ -60,6 +63,7 @@ function DeckTrackDisplay({
           <span>{formatTime(deck.position)}</span>
           <span>{formatRemaining(deck.position, deck.duration)}</span>
         </span>
+        <DeckMeter level={meterLevel} side={side} isPlaying={deck.isPlaying} />
       </div>
       <div className="deck-overview-waveform">
         <DjWaveform
@@ -84,7 +88,7 @@ function TrackDisplayBar({ state, engine, onSeek }: { state: DJState; engine: DJ
 
   return (
     <header className="track-display-bar">
-      <DeckTrackDisplay deck={state.decks[0]} side="left" waveformData={waveformA} onSeek={(seconds) => onSeek(0, seconds)} />
+      <DeckTrackDisplay deck={state.decks[0]} side="left" meterLevel={state.mixer.channels[0].meter} waveformData={waveformA} onSeek={(seconds) => onSeek(0, seconds)} />
       <section className="combined-waveform-area" aria-label="Detailed waveforms">
         <div className="waveform-lane">
           <span className="waveform-deck-chip deck-a">A</span>
@@ -115,7 +119,7 @@ function TrackDisplayBar({ state, engine, onSeek }: { state: DJState; engine: DJ
           />
         </div>
       </section>
-      <DeckTrackDisplay deck={state.decks[1]} side="right" waveformData={waveformB} onSeek={(seconds) => onSeek(1, seconds)} />
+      <DeckTrackDisplay deck={state.decks[1]} side="right" meterLevel={state.mixer.channels[1].meter} waveformData={waveformB} onSeek={(seconds) => onSeek(1, seconds)} />
     </header>
   )
 }
@@ -123,48 +127,34 @@ function TrackDisplayBar({ state, engine, onSeek }: { state: DJState; engine: DJ
 function StudioToolbar({
   activeDrawer,
   focusMode,
-  trackCount,
   midiEnabled,
-  labelMode,
-  testerMode,
   onToggleDrawer,
   onToggleFocus,
-  onCycleLabelMode,
-  onToggleTesterMode,
 }: {
   activeDrawer: Drawer
   focusMode: boolean
-  trackCount: number
   midiEnabled: boolean
-  labelMode: ControlLabelMode
-  testerMode: boolean
   onToggleDrawer: (drawer: Exclude<Drawer, null>) => void
   onToggleFocus: () => void
-  onCycleLabelMode: () => void
-  onToggleTesterMode: () => void
 }) {
   return (
     <nav className="studio-toolbar" aria-label="Studio navigation">
       <div className="toolbar-left">
         <button className={`toolbar-button ${activeDrawer === 'library' ? 'active' : ''}`} onClick={() => onToggleDrawer('library')}>
+          <span className="tb-icon" aria-hidden="true">♪</span>
           Music Library
         </button>
         <button className={`toolbar-button ${activeDrawer === 'equipment' ? 'active' : ''}`} onClick={() => onToggleDrawer('equipment')}>
+          <span className="tb-icon" aria-hidden="true">⚙</span>
           Equipment
         </button>
         <button className={`toolbar-button ${activeDrawer === 'settings' ? 'active' : ''}`} onClick={() => onToggleDrawer('settings')}>
+          <span className="tb-icon" aria-hidden="true">≡</span>
           Settings
         </button>
       </div>
       <div className="toolbar-right">
-        <span className="toolbar-count">{trackCount} tracks</span>
-        <span className={`toolbar-midi ${midiEnabled ? 'active' : ''}`}>MIDI {midiEnabled ? 'on' : 'off'}</span>
-        <button className={`toolbar-button toolbar-labels-button ${labelMode !== 'off' ? 'active' : ''}`} onClick={onCycleLabelMode} aria-pressed={labelMode !== 'off'}>
-          Labels {labelMode === 'off' ? 'Off' : labelMode === 'minimal' ? 'Minimal' : 'Full'}
-        </button>
-        <button className={`toolbar-button toolbar-labels-button ${testerMode ? 'active' : ''}`} onClick={onToggleTesterMode} aria-pressed={testerMode}>
-          Tester {testerMode ? 'On' : 'Off'}
-        </button>
+        <span className={`toolbar-midi-dot ${midiEnabled ? 'active' : ''}`} aria-label={`MIDI ${midiEnabled ? 'connected' : 'off'}`} title={`MIDI ${midiEnabled ? 'connected' : 'off'}`} />
         <button className={`toolbar-icon-button ${focusMode ? 'active' : ''}`} onClick={onToggleFocus} aria-label="Toggle focus view" title="Toggle focus view">
           <span aria-hidden="true" />
         </button>
@@ -479,6 +469,8 @@ function SettingsPanel({
   state,
   midiSupported,
   debugEnabled,
+  labelMode,
+  testerMode,
   themeId,
   stickers,
   selectedStickerId,
@@ -493,10 +485,14 @@ function SettingsPanel({
   onRemoveSticker,
   onToggleStickerEditMode,
   onSetActiveTab,
+  onCycleLabelMode,
+  onToggleTesterMode,
 }: {
   state: DJState
   midiSupported: boolean
   debugEnabled: boolean
+  labelMode: ControlLabelMode
+  testerMode: boolean
   themeId: ControllerThemeId
   stickers: ControllerSticker[]
   selectedStickerId: string | null
@@ -511,6 +507,8 @@ function SettingsPanel({
   onRemoveSticker: (id: string) => void
   onToggleStickerEditMode: () => void
   onSetActiveTab: (tab: SettingsTab) => void
+  onCycleLabelMode: () => void
+  onToggleTesterMode: () => void
 }) {
   const stickerFileRef = useRef<HTMLInputElement>(null)
   const selectedSticker = stickers.find((sticker) => sticker.id === selectedStickerId) ?? null
@@ -604,9 +602,20 @@ function SettingsPanel({
 
       {activeTab === 'developer' && <section className="drawer-section">
         <h2>Developer</h2>
-        <button className={`toolbar-button ${debugEnabled ? 'active' : ''}`} onClick={onToggleDebug}>
-          {debugEnabled ? 'Hide debug overlay' : 'Show debug overlay'}
-        </button>
+        <div className="dev-controls">
+          <button className={`toolbar-button ${debugEnabled ? 'active' : ''}`} onClick={onToggleDebug}>
+            {debugEnabled ? 'Hide debug overlay' : 'Show debug overlay'}
+          </button>
+          <button className={`toolbar-button ${labelMode !== 'off' ? 'active' : ''}`} onClick={onCycleLabelMode}>
+            Labels: {labelMode === 'off' ? 'Off' : labelMode === 'minimal' ? 'Minimal' : 'Full'}
+          </button>
+          <button className={`toolbar-button ${testerMode ? 'active' : ''}`} onClick={onToggleTesterMode}>
+            Tester: {testerMode ? 'On' : 'Off'}
+          </button>
+          <div className="settings-note">
+            Web MIDI is {midiSupported ? 'available' : 'unavailable'} in this browser.
+          </div>
+        </div>
       </section>}
     </div>
   )
@@ -846,14 +855,9 @@ export default function App() {
       <StudioToolbar
         activeDrawer={activeDrawer}
         focusMode={focusMode}
-        trackCount={libState.tracks.length}
         midiEnabled={midiEnabled}
-        labelMode={labelMode}
-        testerMode={testerMode}
         onToggleDrawer={toggleDrawer}
         onToggleFocus={() => setFocusMode((v) => !v)}
-        onCycleLabelMode={cycleLabelMode}
-        onToggleTesterMode={toggleTesterMode}
       />
 
       <main className="controller-stage">
@@ -920,6 +924,8 @@ export default function App() {
             state={state}
             midiSupported={midiSupported}
             debugEnabled={debugEnabled}
+            labelMode={labelMode}
+            testerMode={testerMode}
             themeId={controllerTheme}
             stickers={stickers}
             selectedStickerId={selectedStickerId}
@@ -934,6 +940,8 @@ export default function App() {
             onRemoveSticker={handleStickerRemove}
             onToggleStickerEditMode={() => setStickerEditMode((value) => !value)}
             onSetActiveTab={setActiveSettingsTab}
+            onCycleLabelMode={cycleLabelMode}
+            onToggleTesterMode={toggleTesterMode}
           />
         )}
       </aside>

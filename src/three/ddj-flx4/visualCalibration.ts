@@ -122,84 +122,325 @@ export function applyForcedMaterialProbe(root: THREE.Object3D): void {
   material.dispose()
 }
 
+// ── Key surface upgrade: MeshPhysicalMaterial ─────────────────────────────
+// The only way to get real clearcoat in Three.js is MeshPhysicalMaterial.
+// This copies a calibrated MeshStandardMaterial into a Physical one while
+// preserving every authored property.
+function upgradeToPhysical(std: THREE.MeshStandardMaterial): THREE.MeshPhysicalMaterial {
+  const p = new THREE.MeshPhysicalMaterial({
+    color:             std.color.clone(),
+    emissive:          std.emissive?.clone() ?? new THREE.Color(0x000000),
+    emissiveIntensity: std.emissiveIntensity ?? 0,
+    roughness:         std.roughness,
+    metalness:         std.metalness,
+    map:               std.map,
+    normalMap:         std.normalMap,
+    roughnessMap:      std.roughnessMap,
+    metalnessMap:      std.metalnessMap,
+    aoMap:             std.aoMap,
+    envMap:            std.envMap,
+    envMapIntensity:   std.envMapIntensity,
+    transparent:       std.transparent,
+    opacity:           std.opacity,
+    side:              std.side,
+    depthWrite:        std.depthWrite,
+    toneMapped:        (std as THREE.MeshStandardMaterial & { toneMapped?: boolean }).toneMapped ?? true,
+  })
+  p.name = std.name
+  return p
+}
+
+// ── Material debug: DEV-only flat gray override ───────────────────────────
+/** ?materialDebug=forced — renders role-keyed gray shades to isolate whether
+ *  remaining flatness is a LIGHTING or MATERIAL issue. Not for production. */
+export function applyMaterialDebug(root: THREE.Object3D): void {
+  const roleColors: Record<string, number> = {
+    chassis:         0x282c30,
+    'button-body':   0x4a5260,
+    'button-label':  0xe8eef4,
+    'panel-label':   0xdce4ee,
+    'knob-body':     0x565e6a,
+    'knob-indicator':0xf0f4f8,
+    'pad':           0x3e4a56,
+    'fader-cap':     0xc8d0d8,
+    'fader-rail':    0x4a5260,
+    'jog-ring':      0x6a7888,
+    'metal-accent':  0x8898a8,
+    'led':           0x103818,
+  }
+  root.traverse((object) => {
+    if (!(object as THREE.Mesh).isMesh) return
+    const mesh = object as THREE.Mesh
+    const role = roleForName(mesh.name)
+    const hex = roleColors[role] ?? 0x303030
+    const mat = new THREE.MeshStandardMaterial({
+      color: hex,
+      roughness: role === 'chassis' ? 0.75 : role === 'fader-cap' ? 0.15 : 0.45,
+      metalness: role === 'fader-cap' || role === 'metal-accent' ? 0.55 : 0.04,
+    })
+    mesh.material = mat
+  })
+}
+
 function tuneMaterial(material: ColorMaterial, role: ControllerMaterialRole, themeId: ControllerThemeId): void {
   const theme = getControllerTheme(themeId)
   const accent = new THREE.Color(theme.accent)
-  const materialName = material.name.toLowerCase()
-  const physical = material as ColorMaterial & {
-    clearcoat?: number
-    clearcoatRoughness?: number
-    sheen?: number
-    sheenRoughness?: number
+  const n = material.name.toLowerCase()
+
+  // ── Exact per-node overrides based on confirmed GLB node name patterns ──
+  // These fire FIRST and return early so the role-based block doesn't
+  // overwrite a more specific assignment.
+
+  // Jog wheel sub-parts — must match before generic jog-ring role
+  if (/leftjogwheel|rightjogwheel/.test(n)) {
+    const mat = material as THREE.MeshStandardMaterial
+    if (/outerrim|rimstep|rimscallop/.test(n)) {
+      // Outer hard anodised-aluminum ring — catches key light strongly
+      mat.color?.setHex(0xb8ccd8)
+      mat.roughness = 0.22
+      mat.metalness = 0.72
+      if (mat.emissive) { mat.emissive.setHex(0x000000); mat.emissiveIntensity = 0 }
+    } else if (/innerwhitering/.test(n)) {
+      mat.color?.setHex(0xdae6f0)
+      mat.roughness = 0.35
+      mat.metalness = 0.45
+    } else if (/centerdarkring|plattersubtlering/.test(n)) {
+      // Lifted: platter concentric rings — visibly darker than rim but not black
+      mat.color?.setHex(0x4c5868)
+      mat.roughness = 0.62
+      mat.metalness = 0.08
+    } else if (/innerdisc|mesh/.test(n)) {
+      // Main platter surface — graphite gray
+      mat.color?.setHex(0x647280)
+      mat.roughness = 0.55
+      mat.metalness = 0.12
+    } else if (/centercap/.test(n)) {
+      // Center hub — slightly lighter than chassis to be readable
+      mat.color?.setHex(0x384248)
+      mat.roughness = 0.58
+      mat.metalness = 0.06
+    } else if (/finetickring|accentfinering/.test(n)) {
+      mat.color?.setHex(0xbcccd8)
+      mat.roughness = 0.30
+      mat.metalness = 0.55
+      if (mat.emissive) { mat.emissive.setHex(0x8090a0); mat.emissiveIntensity = 0.28 }
+    } else if (/recessbase/.test(n)) {
+      // Recess — darker than platter, above chassis
+      mat.color?.setHex(0x2e343c)
+      mat.roughness = 0.82
+      mat.metalness = 0.04
+    }
+    return
   }
-  if (material.color) {
-    // These are deliberate role anchors, not multipliers on the authored near-black
-    // values. The GLB uses very dark albedos, so a lerp leaves the control surfaces
-    // below a usable contrast threshold even when the calibration is assigned.
-    if (role === 'panel-label' || role === 'button-label' || role === 'knob-indicator') {
-      material.color.setHex(role === 'knob-indicator' ? 0xf6f8fb : role === 'panel-label' ? 0xf1f5f9 : 0xf5f8fb)
-    } else if (role === 'fader-rail') {
-      material.color.setHex(materialName.includes('slot') ? 0x566474 : themeId === 'glossy-black' ? 0xb8c3cf : 0x9ba9b8)
-    } else if (role === 'fader-cap') {
-      material.color.setHex(themeId === 'accent-neon' ? 0xe9eef4 : 0xf7f9fb)
-    } else if (role === 'jog-ring') {
-      material.color.setHex(materialName.includes('inner') ? 0xb6c2d0 : 0x899aac)
-    } else if (role === 'metal-accent') {
-      material.color.copy(accent).lerp(new THREE.Color(0x6f7f90), themeId === 'accent-neon' ? 0.25 : 0.75)
-    } else if (role === 'knob-body') {
-      material.color.setHex(materialName.includes('knobtop') ? 0xe4eaf0 : 0xb4c2d0)
-    } else if (role === 'button-body') {
-      if (materialName.includes('bezel')) material.color.setHex(0x596a7c)
-      else if (materialName.includes('transporttop')) material.color.setHex(0xc1cbd6)
-      else if (materialName.includes('top')) material.color.setHex(themeId === 'glossy-black' ? 0xa8b5c4 : 0x9baabb)
-      else material.color.setHex(themeId === 'glossy-black' ? 0x8b9bad : 0x8293a6)
-    } else if (role === 'pad') {
-      if (materialName.includes('bezel')) material.color.setHex(0x99a8b8)
-      else if (materialName.includes('bed')) material.color.setHex(0x263443)
-      else if (materialName.includes('top')) material.color.setHex(0x70859a)
-      else material.color.setHex(themeId === 'accent-neon' ? 0x758391 : 0x62778c)
-    } else if (role === 'chassis') {
-      material.color.setHex(themeId === 'glossy-black' ? 0x0b0f14 : themeId === 'accent-neon' ? 0x10151b : 0x141920)
+
+  // Pad orange border geometry — always orange, emissive driven by activeState
+  if (/orangeborder/.test(n)) {
+    const mat = material as THREE.MeshStandardMaterial
+    mat.color?.setHex(0xff5500)
+    mat.roughness = 0.45
+    mat.metalness = 0.02
+    if (mat.emissive) { mat.emissive.setHex(0x000000); mat.emissiveIntensity = 0 }
+    return
+  }
+
+  // Pad PadTopAccent geometry — subtle highlight stripe
+  if (/padtopaccent/.test(n)) {
+    const mat = material as THREE.MeshStandardMaterial
+    mat.color?.setHex(0x6888a0)
+    mat.roughness = 0.35
+    mat.metalness = 0.18
+    if (mat.emissive) { mat.emissive.setHex(0x203040); mat.emissiveIntensity = 0.3 }
+    return
+  }
+
+  // Fader handles and ridges — bright, metallic — primary visual landmark
+  if (/faderhandlebody|crossfaderhandlebody/.test(n)) {
+    const mat = material as THREE.MeshStandardMaterial
+    mat.color?.setHex(/crossfader/.test(n) ? 0xe0e7ee : 0xc8d4dc)
+    mat.roughness = 0.18
+    mat.metalness = 0.78
+    if (mat.emissive) { mat.emissive.setHex(0x000000); mat.emissiveIntensity = 0 }
+    return
+  }
+  if (/faderhandleridge|crossfaderhandleridge/.test(n)) {
+    const mat = material as THREE.MeshStandardMaterial
+    mat.color?.setHex(0xa0b0bc)
+    mat.roughness = 0.28
+    mat.metalness = 0.62
+    return
+  }
+
+  // Fader slot/track — dark recess, clearly lower than cap, but not invisible
+  if (/fader.*slot|fader.*track|crossfader.*track/.test(n)) {
+    const mat = material as THREE.MeshStandardMaterial
+    mat.color?.setHex(/slot/.test(n) ? 0x22282e : 0x30363e)
+    mat.roughness = 0.88
+    mat.metalness = 0.02
+    if (mat.emissive) { mat.emissive.setHex(0x000000); mat.emissiveIntensity = 0 }
+    return
+  }
+
+  // Fader tick marks — visible white lines
+  if (/fadertick|crossfadertick|crossfaderscaletick/.test(n)) {
+    const mat = material as THREE.MeshStandardMaterial
+    mat.color?.setHex(0xc0ccd6)
+    mat.roughness = 0.55
+    mat.metalness = 0.05
+    if (mat.emissive) { mat.emissive.setHex(0x8898a8); mat.emissiveIntensity = 0.45; (mat as THREE.MeshStandardMaterial & { toneMapped?: boolean }).toneMapped = false }
+    return
+  }
+
+  // ── Role-based assignments ──────────────────────────────────────────────
+  if (!material.color) return
+
+  switch (role) {
+    case 'chassis': {
+      // Lifted from near-black to visible dark charcoal — must be distinct from
+      // the near-black scene background (#06080b / #05070b).
+      const c = themeId === 'glossy-black' ? 0x1a2228 : themeId === 'accent-neon' ? 0x1f252c : 0x2a323a
+      material.color.setHex(c)
+      if (material.roughness !== undefined) material.roughness = themeId === 'glossy-black' ? 0.28 : 0.70
+      if (material.metalness !== undefined) material.metalness = themeId === 'glossy-black' ? 0.08 : 0.02
+      if (material.emissive) { material.emissive.setHex(0x000000); if (material.emissiveIntensity !== undefined) material.emissiveIntensity = 0 }
+      break
+    }
+    case 'jog-ring': {
+      // Generic jog ring (catch-all for any jog geometry not handled above)
+      material.color.setHex(0x8898aa)
+      if (material.roughness !== undefined) material.roughness = 0.35
+      if (material.metalness !== undefined) material.metalness = 0.55
+      if (material.emissive) { material.emissive.setHex(0x000000); if (material.emissiveIntensity !== undefined) material.emissiveIntensity = 0 }
+      break
+    }
+    case 'knob-body': {
+      if (n.includes('topcap')) {
+        // The top-cap ring catches light like a real knob pointer ring
+        material.color.setHex(0xc8d4de)
+        if (material.roughness !== undefined) material.roughness = 0.20
+        if (material.metalness !== undefined) material.metalness = 0.65
+      } else {
+        // Lifted from near-black to visible dark plastic
+        material.color.setHex(0x708090)
+        if (material.roughness !== undefined) material.roughness = 0.52
+        if (material.metalness !== undefined) material.metalness = 0.08
+      }
+      if (material.emissive) { material.emissive.setHex(0x000000); if (material.emissiveIntensity !== undefined) material.emissiveIntensity = 0 }
+      break
+    }
+    case 'knob-indicator': {
+      // Pointer wedge — bright white, texture removed, slightly emissive
+      material.color.setHex(0xf0f4f8)
+      ;(material as THREE.MeshStandardMaterial & { map?: THREE.Texture | null }).map = null
+      if (material.roughness !== undefined) material.roughness = 0.28
+      if (material.metalness !== undefined) material.metalness = 0.22
+      if (material.emissive) { material.emissive.setHex(0xa0b0c0); if (material.emissiveIntensity !== undefined) material.emissiveIntensity = 0.45 }
+      break
+    }
+    case 'fader-cap': {
+      // Generic fader cap (HandleBody handled above, this catches any remaining)
+      material.color.setHex(0xb8c4cc)
+      if (material.roughness !== undefined) material.roughness = 0.22
+      if (material.metalness !== undefined) material.metalness = 0.68
+      if (material.emissive) { material.emissive.setHex(0x000000); if (material.emissiveIntensity !== undefined) material.emissiveIntensity = 0 }
+      break
+    }
+    case 'fader-rail': {
+      // Rail visibly darker than cap but not invisible — lifted from near-black
+      material.color.setHex(0x48525e)
+      if (material.roughness !== undefined) material.roughness = 0.78
+      if (material.metalness !== undefined) material.metalness = 0.04
+      if (material.emissive) { material.emissive.setHex(0x000000); if (material.emissiveIntensity !== undefined) material.emissiveIntensity = 0 }
+      break
+    }
+    case 'button-body': {
+      const isTransport = /play|cue(?!looploop)/.test(n) && !/channel/.test(n)
+      const isBezel     = n.includes('bezel')
+      const isTop       = n.includes('top')
+
+      if (isBezel) {
+        // Bezel — raised rim around button, slightly metallic edge
+        material.color.setHex(0x72808e)
+        if (material.roughness !== undefined) material.roughness = 0.38
+        if (material.metalness !== undefined) material.metalness = 0.22
+      } else if (isTransport && isTop) {
+        // PLAY/CUE top face — visibly lighter than other buttons
+        material.color.setHex(themeId === 'glossy-black' ? 0xd0dae2 : 0xbecad6)
+        if (material.roughness !== undefined) material.roughness = 0.35
+        if (material.metalness !== undefined) material.metalness = 0.12
+      } else if (isTop) {
+        // Utility button top — lifted to be visible
+        material.color.setHex(0xa4b4c4)
+        if (material.roughness !== undefined) material.roughness = 0.45
+        if (material.metalness !== undefined) material.metalness = 0.08
+      } else {
+        // Button body/shell — dark charcoal plastic, above chassis
+        material.color.setHex(0x5e6c7a)
+        if (material.roughness !== undefined) material.roughness = 0.58
+        if (material.metalness !== undefined) material.metalness = 0.04
+      }
+      // No emissive on button bodies — active state driven by litMesh clone
+      if (material.emissive) { material.emissive.setHex(0x000000); if (material.emissiveIntensity !== undefined) material.emissiveIntensity = 0 }
+      break
+    }
+    case 'pad': {
+      if (n.includes('bezel')) {
+        // Pad bezel — outer raised frame, clearly brighter than body
+        material.color.setHex(0xa8bcce)
+        if (material.roughness !== undefined) material.roughness = 0.38
+        if (material.metalness !== undefined) material.metalness = 0.18
+      } else if (n.includes('bed')) {
+        // Pad grid bed — dark recess, slightly above chassis level
+        material.color.setHex(0x323c48)
+        if (material.roughness !== undefined) material.roughness = 0.80
+        if (material.metalness !== undefined) material.metalness = 0.02
+      } else if (n.includes('top')) {
+        // Pad top face — rubber-like but visible
+        material.color.setHex(0x7e92a8)
+        if (material.roughness !== undefined) material.roughness = 0.70
+        if (material.metalness !== undefined) material.metalness = 0.02
+      } else {
+        // Pad body/shell — lifted one visual stop
+        material.color.setHex(themeId === 'accent-neon' ? 0x8499ae : 0x6a7e94)
+        if (material.roughness !== undefined) material.roughness = 0.65
+        if (material.metalness !== undefined) material.metalness = 0.03
+      }
+      if (material.emissive) { material.emissive.setHex(0x000000); if (material.emissiveIntensity !== undefined) material.emissiveIntensity = 0 }
+      break
+    }
+    case 'panel-label':
+    case 'button-label': {
+      // Baked text geometry — keep modest since Troika labels will replace priority ones
+      // These provide backup visibility for labels not yet replaced
+      material.color.setHex(0xffffff)
+      if (material.roughness !== undefined) material.roughness = 0.35
+      if (material.metalness !== undefined) material.metalness = 0.0
+      if (material.emissive) {
+        material.emissive.setHex(0xf0f4f8) // Subtle off-white
+        if (material.emissiveIntensity !== undefined) {
+          material.emissiveIntensity = role === 'panel-label' ? 2.2 : 2.4 // Moderate boost
+        }
+        ;(material as THREE.MeshStandardMaterial & { toneMapped?: boolean }).toneMapped = false
+      }
+      break
+    }
+    case 'led': {
+      // Already orange/LED — keep but make sure it's self-illuminated
+      if (material.emissive) { material.emissive.setHex(0xff4400); if (material.emissiveIntensity !== undefined) material.emissiveIntensity = 1.2 }
+      ;(material as THREE.MeshStandardMaterial & { toneMapped?: boolean }).toneMapped = false
+      break
+    }
+    case 'metal-accent': {
+      material.color.copy(accent).lerp(new THREE.Color(0x8898a8), 0.65)
+      if (material.roughness !== undefined) material.roughness = 0.25
+      if (material.metalness !== undefined) material.metalness = 0.72
+      if (material.emissive) { material.emissive.setHex(0x000000); if (material.emissiveIntensity !== undefined) material.emissiveIntensity = 0 }
+      break
     }
   }
+
+  // Glossy-black theme: add clearcoat to chassis via physical material upgrade
   const textured = material as ColorMaterial & { map?: THREE.Texture | null; toneMapped?: boolean }
-  if (role === 'knob-indicator') {
-    // Orientation markers are separate geometry. Removing the dark label atlas
-    // makes the pointer a stable, readable neutral mark at every knob angle.
-    textured.map = null
-  }
-  if (material.roughness !== undefined) {
-    if (role === 'chassis') material.roughness = themeId === 'glossy-black' ? 0.38 : 0.66
-    if (role === 'fader-cap' || role === 'jog-ring' || role === 'metal-accent') material.roughness = Math.min(material.roughness, 0.46 - theme.gloss * 0.2)
-    if (role === 'button-body' || role === 'knob-body' || role === 'pad') material.roughness = Math.min(material.roughness, themeId === 'glossy-black' ? 0.42 : 0.58)
-    if (role === 'panel-label' || role === 'button-label' || role === 'knob-indicator') material.roughness = Math.min(material.roughness, 0.64)
-  }
-  if (material.metalness !== undefined && (role === 'jog-ring' || role === 'fader-cap' || role === 'knob-body' || role === 'metal-accent')) {
-    material.metalness = Math.max(material.metalness, 0.12 + theme.gloss * 0.22)
-  }
-  if (physical.clearcoat !== undefined) {
-    physical.clearcoat =
-      themeId === 'glossy-black' && role === 'chassis' ? 0.48 :
-      themeId === 'glossy-black' && (role === 'button-body' || role === 'jog-ring' || role === 'knob-body') ? 0.28 :
-      0.08
-    physical.clearcoatRoughness = role === 'chassis' ? 0.42 : 0.32
-  }
-  if (material.emissive && (role === 'panel-label' || role === 'button-label' || role === 'knob-indicator')) {
-    material.emissive.setHex(role === 'knob-indicator' ? 0x3d4650 : role === 'panel-label' ? 0xd6dee8 : 0xdce4ee)
-    if (material.emissiveIntensity !== undefined) material.emissiveIntensity = role === 'knob-indicator' ? 0.22 : role === 'panel-label' ? 1.45 : 1.55
-    if (role === 'panel-label' || role === 'button-label') textured.toneMapped = false
-  }
-  if (material.emissive && (role === 'knob-body' || role === 'fader-cap' || role === 'fader-rail' || role === 'jog-ring' || role === 'button-body' || role === 'pad')) {
-    material.emissive.copy(role === 'pad' && themeId === 'accent-neon' ? accent : new THREE.Color(role === 'pad' ? 0x2e4154 : 0x435363))
-    if (material.emissiveIntensity !== undefined) {
-      material.emissiveIntensity =
-        role === 'jog-ring' ? 0.28 :
-        role === 'button-body' ? 0.45 :
-        role === 'pad' ? 0.34 :
-        role === 'fader-rail' ? 0.32 :
-        0.4
-    }
-  }
+  if (textured.map && role === 'knob-indicator') textured.map = null
 }
 
 export function calibrateControllerMaterials(root: THREE.Object3D, enabled = true, themeId: ControllerThemeId = 'default-dark'): MaterialCalibrationResult {
@@ -219,9 +460,9 @@ export function calibrateControllerMaterials(root: THREE.Object3D, enabled = tru
       materials.add(source)
       classifiedMaterials.add(source)
       prepareTextureColorSpaces(source)
-      const key = `${source.uuid}:${role}`
+      const key = `${source.uuid}:${role}:${mesh.name}`
       const sourceColor = (source as ColorMaterial).color?.toArray() ?? null
-      let audit = auditByKey.get(key)
+      let audit = auditByKey.get(`${source.uuid}:${role}`)
       if (!audit) {
         audit = {
           material: source.name || source.type,
@@ -236,13 +477,39 @@ export function calibrateControllerMaterials(root: THREE.Object3D, enabled = tru
           originalMetalness: (source as ColorMaterial).metalness ?? null,
           finalMetalness: (source as ColorMaterial).metalness ?? null
         }
-        auditByKey.set(key, audit)
+        auditByKey.set(`${source.uuid}:${role}`, audit)
       }
       audit.meshCount += 1
+
+      // Key change from Pass 2: each mesh gets its OWN clone keyed by
+      // mesh.name, not just material uuid:role. This ensures per-node
+      // overrides (jog rim vs jog disc) are applied independently even when
+      // the GLB shares one source material between them.
       let tuned = materialRoles.get(key)
       if (!tuned) {
         tuned = enabled ? source.clone() : source
-        if (enabled) tuneMaterial(tuned as ColorMaterial, role, themeId)
+        if (enabled) {
+          // Set the name so tuneMaterial can pattern-match on the mesh name
+          ;(tuned as THREE.Material).name = mesh.name
+          tuneMaterial(tuned as ColorMaterial, role, themeId)
+          // Upgrade to MeshPhysicalMaterial for surfaces that need clearcoat
+          const shouldUpgrade =
+            enabled &&
+            (themeId === 'glossy-black' ||
+             /outerrim|rimstep|faderhandle.*body|crossfaderhandle.*body|topcap/.test(mesh.name.toLowerCase()))
+          if (shouldUpgrade && (tuned as THREE.MeshStandardMaterial).isMeshStandardMaterial) {
+            const physical = upgradeToPhysical(tuned as THREE.MeshStandardMaterial)
+            const isJogRim = /outerrim|rimstep/.test(mesh.name.toLowerCase())
+            const isFaderCap = /faderhandle.*body|crossfaderhandle.*body/.test(mesh.name.toLowerCase())
+            const isKnobTop = /topcap/.test(mesh.name.toLowerCase())
+            const isGlossyChassis = themeId === 'glossy-black' && role === 'chassis'
+            if (isJogRim)       { physical.clearcoat = 0.7; physical.clearcoatRoughness = 0.12 }
+            else if (isFaderCap){ physical.clearcoat = 0.5; physical.clearcoatRoughness = 0.08 }
+            else if (isKnobTop) { physical.clearcoat = 0.4; physical.clearcoatRoughness = 0.15 }
+            else if (isGlossyChassis) { physical.clearcoat = 0.6; physical.clearcoatRoughness = 0.35 }
+            tuned = physical as unknown as THREE.Material
+          }
+        }
         materialRoles.set(key, tuned)
         const finalMaterial = tuned as ColorMaterial
         audit.finalColor = finalMaterial.color?.toArray() ?? null
@@ -253,6 +520,9 @@ export function calibrateControllerMaterials(root: THREE.Object3D, enabled = tru
       return tuned
     })
     mesh.material = Array.isArray(mesh.material) ? tunedMaterials : tunedMaterials[0]
+    // Shadows: only top-level visible geometry needs to cast
+    mesh.castShadow = true
+    mesh.receiveShadow = true
   })
 
   return {

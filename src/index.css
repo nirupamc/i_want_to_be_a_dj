@@ -3591,3 +3591,751 @@ input[type=range] {
 .transport-toast {
   position: fixed;
 }
+
+/* ============================================================
+   PASS 1 — VISUAL LAYOUT / COMPOSITION / TOOLBAR CLEANUP
+   This block is authoritative. It must remain at the END of
+   the file so it wins over all previous milestone overrides.
+   ============================================================ */
+
+/* ── Overall grid ─────────────────────────────────────────── */
+.studio-app {
+  grid-template-rows: 116px 44px minmax(0, 1fr);
+}
+
+.studio-app.focus-mode {
+  grid-template-rows: 80px 40px minmax(0, 1fr);
+}
+
+/* ── Header ───────────────────────────────────────────────── */
+.track-display-bar {
+  /*
+   * Three-column grid:
+   *   [Deck A] [Waveform — dominant] [Deck B]
+   * Deck panels have a generous floor at 220px but yield to
+   * the waveform; at any viewport the waveform always wins.
+   */
+  display: grid;
+  grid-template-columns:
+    minmax(220px, 0.9fr)
+    minmax(0, 4fr)
+    minmax(220px, 0.9fr);
+  align-items: stretch;
+  gap: 0;
+  height: auto;
+  min-height: 116px;
+  padding: 0;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(13, 15, 19, 0.99) 0%, rgba(7, 9, 12, 0.99) 100%);
+  border-bottom: 1px solid var(--studio-line);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.38);
+}
+
+/* ── Deck track panels ────────────────────────────────────── */
+.track-display {
+  /*
+   * Clean metadata hierarchy — no box/border around each piece.
+   * Just padding inside, tight vertical stack.
+   */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  padding: 10px 16px 10px 18px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.track-display.deck-left {
+  border-right: 1px solid var(--studio-line);
+  padding-right: 14px;
+}
+
+.track-display.deck-right {
+  border-left: 1px solid var(--studio-line);
+  padding-left: 14px;
+  text-align: right;
+}
+
+.track-display-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.track-display.deck-right .track-display-topline {
+  flex-direction: row-reverse;
+}
+
+/* Title — strongest */
+.track-title {
+  color: var(--studio-text);
+  font-size: 15px;
+  font-weight: 740;
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* Artist — secondary */
+.track-artist {
+  color: var(--studio-muted);
+  font-size: 11px;
+  font-weight: 450;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-height: 14px;
+  min-width: 0;
+}
+
+/* BPM / time — tertiary, compact inline row */
+.track-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+.track-display.deck-right .track-meta {
+  justify-content: flex-end;
+}
+
+.bpm-badge {
+  min-height: 18px;
+  padding: 1px 6px;
+  border: 1px solid rgba(246, 163, 58, 0.28);
+  border-radius: 3px;
+  background: rgba(246, 163, 58, 0.10);
+  color: #ffd89a;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.time-pair {
+  display: inline-flex;
+  gap: 6px;
+  color: #a8adb5;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Overview waveform strip in deck panel */
+.deck-overview-waveform {
+  height: 18px;
+  min-width: 0;
+  margin-top: 3px;
+  opacity: 0.85;
+}
+
+/* ── Waveform center section ──────────────────────────────── */
+.combined-waveform-area {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 5px;
+  padding: 8px 10px;
+  min-width: 0;
+  min-height: 0;
+  background: rgba(5, 7, 9, 0.6);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Playhead line: centered within the waveform column */
+.combined-waveform-area::after {
+  left: 50%;
+  width: 1px;
+  background: #fffdf0;
+  box-shadow: 0 0 10px rgba(246, 163, 58, 0.85);
+}
+
+.combined-waveform-area::before {
+  left: calc(50% - 5px);
+  border-top-color: var(--studio-accent);
+}
+
+.waveform-lane {
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 6px;
+  min-height: 0;
+}
+
+.waveform-deck-chip {
+  font-size: 10px;
+  font-weight: 800;
+  border-radius: 3px;
+}
+
+/* ── Toolbar ──────────────────────────────────────────────── */
+.studio-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 20px;
+  min-height: 44px;
+  height: 44px;
+  background: rgba(7, 8, 10, 0.96);
+  border-bottom: 1px solid var(--studio-line);
+  overflow: hidden;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Primary toolbar buttons — consistent pill design */
+.toolbar-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 6px;
+  background: rgba(20, 24, 32, 0.9);
+  color: rgba(220, 225, 235, 0.88);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.toolbar-button:hover {
+  border-color: rgba(255, 255, 255, 0.20);
+  background: rgba(30, 36, 46, 0.95);
+  color: #f0f2f5;
+}
+
+.toolbar-button.active {
+  border-color: rgba(246, 163, 58, 0.50);
+  background: rgba(246, 163, 58, 0.13);
+  color: #ffd99d;
+}
+
+/* Icon inside toolbar button */
+.tb-icon {
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0.75;
+}
+
+/* Compact focus-mode icon button */
+.toolbar-icon-button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 6px;
+  background: rgba(20, 24, 32, 0.9);
+  color: var(--studio-muted);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+  flex-shrink: 0;
+}
+
+.toolbar-icon-button:hover {
+  border-color: rgba(255, 255, 255, 0.20);
+  background: rgba(30, 36, 46, 0.95);
+}
+
+.toolbar-icon-button.active {
+  border-color: rgba(246, 163, 58, 0.50);
+  color: #ffd99d;
+}
+
+/* MIDI status indicator dot */
+.toolbar-midi-dot {
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #3a3f47;
+  transition: background 200ms ease, box-shadow 200ms ease;
+  flex-shrink: 0;
+}
+
+.toolbar-midi-dot.active {
+  background: var(--studio-green);
+  box-shadow: 0 0 8px rgba(53, 212, 135, 0.7);
+}
+
+/* ── Controller stage ─────────────────────────────────────── */
+.controller-stage {
+  position: relative;
+  display: grid;
+  /*
+   * place-items: center  — controller sits vertically centred
+   * in the available space, eliminating the giant black gap
+   * that appeared when using "start center".
+   */
+  place-items: center;
+  min-height: 0;
+  height: 100%;
+  padding: 12px 24px 16px;
+  overflow: hidden;
+  /*
+   * Subtle staging background:
+   *   1. soft floor-glow ellipse behind/under the controller
+   *   2. warm accent pool (orange) at 55% height
+   *   3. cool radial at top-centre
+   *   4. dark linear base
+   */
+  background:
+    radial-gradient(ellipse 80% 28% at 50% 84%, rgba(255, 255, 255, 0.055), transparent 72%),
+    radial-gradient(ellipse 68% 42% at 50% 56%, rgba(246, 163, 58, 0.09), transparent 68%),
+    radial-gradient(ellipse 60% 32% at 50% 8%, rgba(90, 174, 255, 0.05), transparent 62%),
+    linear-gradient(180deg, #080a0d 0%, #050607 60%, #020304 100%);
+}
+
+/* Edge vignette */
+.controller-stage::after {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: radial-gradient(ellipse at center, transparent 52%, rgba(0, 0, 0, 0.15) 100%);
+  content: "";
+  pointer-events: none;
+}
+
+/* Floor-glow element below the controller */
+.controller-stage::before {
+  position: absolute;
+  bottom: 8%;
+  left: 15%;
+  right: 15%;
+  height: 18%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(246, 163, 58, 0.10), transparent 72%);
+  filter: blur(18px);
+  content: "";
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Canvas wrapper — fills stage, capped so controller doesn't overflow */
+.controller-stage .three-scene-wrapper {
+  position: relative;
+  z-index: 1;
+  width: calc(100vw - 48px);
+  max-width: 1540px;
+  /*
+   * Height: takes all available stage height, capped at 680px.
+   * At 1728×900 the stage is ~740px tall after header+toolbar,
+   * so 680px gives the controller about 78% visual dominance.
+   * At 1920×1080 the stage is ~920px, cap at 720px.
+   * At 1366×768 cap at 580px so nothing clips.
+   */
+  height: min(100%, 680px);
+  margin: 0 auto;
+  background: transparent;
+  filter: drop-shadow(0 28px 48px rgba(0, 0, 0, 0.52));
+}
+
+/* Labels overlay and sticker layer follow the canvas wrapper */
+.control-labels-overlay,
+.sticker-layer {
+  position: absolute;
+  inset: auto;
+  top: 12px;
+  right: auto;
+  bottom: auto;
+  left: 50%;
+  z-index: 6;
+  width: calc(100vw - 48px);
+  max-width: 1540px;
+  height: min(100%, 680px);
+  overflow: hidden;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.sticker-layer {
+  z-index: 5;
+}
+
+.sticker-layer.editing {
+  pointer-events: auto;
+}
+
+/* ── Focus mode ───────────────────────────────────────────── */
+.focus-mode .controller-stage {
+  padding: 8px 18px 12px;
+}
+
+.focus-mode .controller-stage .three-scene-wrapper {
+  height: min(100%, 720px);
+}
+
+/* ── Developer controls in Settings ─────────────────────── */
+.dev-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.dev-controls .settings-note {
+  width: 100%;
+  margin-top: 4px;
+}
+
+/* ── Responsive: 1500px and narrower ─────────────────────── */
+@media (max-width: 1500px) {
+  .controller-stage .three-scene-wrapper,
+  .control-labels-overlay,
+  .sticker-layer {
+    width: calc(100vw - 40px);
+    height: min(100%, 600px);
+  }
+}
+
+/* ── Responsive: 1380px and narrower ─────────────────────── */
+@media (max-width: 1380px) {
+  .track-display-bar {
+    grid-template-columns:
+      minmax(180px, 0.85fr)
+      minmax(0, 4fr)
+      minmax(180px, 0.85fr);
+  }
+
+  .studio-toolbar {
+    gap: 6px;
+    padding: 0 16px;
+  }
+}
+
+/* ── Responsive: 1200px and narrower ─────────────────────── */
+@media (max-width: 1200px) {
+  .track-display-bar {
+    grid-template-columns:
+      minmax(160px, 0.8fr)
+      minmax(0, 4fr)
+      minmax(160px, 0.8fr);
+  }
+
+  .track-title {
+    font-size: 14px;
+  }
+}
+
+/* ── Responsive: short viewport (height ≤ 820px) ─────────── */
+@media (max-height: 820px) and (min-width: 901px) {
+  .studio-app,
+  .studio-app.focus-mode {
+    grid-template-rows: 104px 40px minmax(0, 1fr);
+  }
+
+  .track-display-bar {
+    min-height: 104px;
+  }
+
+  .controller-stage {
+    padding: 8px 22px 12px;
+  }
+
+  .controller-stage .three-scene-wrapper,
+  .control-labels-overlay,
+  .sticker-layer {
+    height: min(100%, 560px);
+  }
+}
+
+/* ── Responsive: narrow (≤ 900px) ───────────────────────── */
+@media (max-width: 900px) {
+  .studio-app {
+    grid-template-rows: auto 44px minmax(0, 1fr);
+  }
+
+  .track-display-bar {
+    grid-template-columns: 1fr;
+    min-height: auto;
+    height: auto;
+  }
+
+  .track-display.deck-left,
+  .track-display.deck-right {
+    border: 0;
+    padding-inline: 12px;
+    text-align: left;
+  }
+
+  .track-display.deck-right .track-display-topline,
+  .track-display.deck-right .track-meta {
+    flex-direction: row;
+    justify-content: flex-start;
+  }
+
+  .combined-waveform-area {
+    min-height: 72px;
+  }
+
+  .controller-stage {
+    padding: 8px 12px 12px;
+  }
+
+  .controller-stage .three-scene-wrapper,
+  .control-labels-overlay,
+  .sticker-layer {
+    width: calc(100vw - 24px);
+    height: min(100%, 420px);
+  }
+}
+
+/* END PASS 1 */
+
+/* ============================================================
+   PASS 2 — CONTROLLER READABILITY / MATERIALS / LABELS / FEEDBACK
+   Must remain at the END of the file.
+   ============================================================ */
+
+/* ── CSS custom properties for meters ────────────────────────────────── */
+.studio-app {
+  --meter-green:  #2fd47a;
+  --meter-yellow: #e8c030;
+  --meter-red:    #f04040;
+  --meter-bg:     rgba(0, 0, 0, 0.55);
+  --meter-border: rgba(255, 255, 255, 0.08);
+}
+
+/* ── Deck VU meter ────────────────────────────────────────────────────── */
+.deck-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 14px;
+  flex-shrink: 0;
+  /* Mild border so it looks like a hardware inset */
+  padding: 2px 4px;
+  border: 1px solid var(--meter-border);
+  border-radius: 3px;
+  background: var(--meter-bg);
+}
+
+.deck-meter.deck-meter-right {
+  flex-direction: row-reverse;
+}
+
+.deck-meter-seg {
+  display: block;
+  width: 5px;
+  height: 8px;
+  border-radius: 1px;
+  /* Default: dark off-state */
+  background: rgba(255, 255, 255, 0.08);
+  transition: background 80ms linear;
+}
+
+.deck-meter-seg.active {
+  background: var(--seg-color, var(--meter-green));
+}
+
+/* When playing, add a faint pulse on the container to draw the eye */
+.deck-meter.playing {
+  border-color: rgba(47, 212, 122, 0.22);
+}
+
+/* ── Control label overlay — improved readability ─────────────────────── */
+.control-labels-overlay {
+  /* Ensure labels sit above the canvas but never intercept input */
+  pointer-events: none;
+}
+
+/* Base callout: larger font, cleaner pill, enhanced readability */
+.control-label-callout {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  padding: 4px 9px;
+  border-radius: 4px;
+  background: rgba(2, 4, 8, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 750;
+  line-height: 1.15;
+  letter-spacing: 0.04em;
+  text-align: center;
+  text-transform: uppercase;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.64), 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* Deck A — blue tint */
+.control-label-callout.deck-a {
+  border-color: rgba(90, 174, 255, 0.80);
+  color: #e0f2ff;
+  background: rgba(2, 6, 14, 0.95);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.64), 0 0 8px rgba(90, 174, 255, 0.15);
+}
+
+/* Deck B — pink tint */
+.control-label-callout.deck-b {
+  border-color: rgba(255, 108, 168, 0.80);
+  color: #ffe4f0;
+  background: rgba(14, 2, 8, 0.95);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.64), 0 0 8px rgba(255, 108, 168, 0.15);
+}
+
+/* Mixer — amber tint */
+.control-label-callout.mixer {
+  border-color: rgba(246, 163, 58, 0.74);
+  color: #fff0d6;
+  background: rgba(12, 8, 2, 0.95);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.64), 0 0 8px rgba(246, 163, 58, 0.12);
+}
+
+/* FX — green tint */
+.control-label-callout.fx {
+  border-color: rgba(47, 212, 122, 0.70);
+  color: #d0ffe8;
+  background: rgba(2, 10, 6, 0.95);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.64), 0 0 8px rgba(47, 212, 122, 0.12);
+}
+
+/* Browse — neutral */
+.control-label-callout.browse {
+  border-color: rgba(200, 215, 230, 0.62);
+  color: #f4f8fc;
+  background: rgba(2, 4, 8, 0.94);
+}
+
+/* Unsupported controls — dashed border, muted */
+.control-label-callout.unsupported {
+  border-style: dashed;
+  border-color: rgba(255, 120, 120, 0.72);
+  color: #ffc4c4;
+  opacity: 0.82;
+}
+
+/* Status line beneath the label text (tester mode) */
+.control-label-status {
+  margin-top: 2px;
+  color: rgba(180, 195, 210, 0.80);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+/* Primary label text inside callout */
+.control-label-primary {
+  display: block;
+}
+
+/* Hover tooltip (tester mode) */
+.control-hover-tooltip {
+  position: absolute;
+  z-index: 7;
+  display: grid;
+  gap: 3px;
+  min-width: 140px;
+  padding: 9px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 5px;
+  background: rgba(4, 6, 10, 0.96);
+  color: #eef2f8;
+  font-size: 11px;
+  line-height: 1.25;
+  transform: translate(14px, -50%);
+  white-space: nowrap;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.56);
+}
+
+.control-hover-tooltip strong {
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.control-hover-tooltip.unsupported {
+  border-color: rgba(255, 132, 132, 0.62);
+}
+
+/* Helper note at bottom-right of labels overlay */
+.control-labels-note {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 3px 7px;
+  border-radius: 3px;
+  background: rgba(4, 6, 10, 0.72);
+  color: #9aa4b0;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+}
+
+/* Full mode makes labels slightly smaller to fit more */
+.mode-full .control-label-callout {
+  font-size: 10px;
+  min-height: 18px;
+  padding: 2px 6px;
+}
+
+/* ── Track state playing indicator ──────────────────────────────────── */
+/* (reinforces the green dot in the header when deck is playing) */
+.track-state.playing {
+  color: #c8ffe2;
+  font-weight: 700;
+}
+
+.track-state.playing::before {
+  background: var(--studio-green, #35d487);
+  box-shadow: 0 0 10px rgba(53, 212, 135, 0.80);
+  animation: beat-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes beat-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(53, 212, 135, 0.72); }
+  50%       { box-shadow: 0 0 16px rgba(53, 212, 135, 0.55); }
+}
+
+/* ── Responsive: compact meter on small viewports ───────────────────── */
+@media (max-width: 1200px) {
+  .deck-meter-seg {
+    width: 4px;
+    height: 7px;
+  }
+
+  .deck-meter {
+    padding: 2px 3px;
+    gap: 1.5px;
+  }
+}
+
+/* END PASS 2 */

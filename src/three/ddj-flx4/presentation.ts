@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { CONTROLLER_MODEL_VERSION } from './controllerModelVersion'
 
 export const CONTROLLER_GLB_PATH = '/models/ddj-flx4/ddj-flx4-controller.glb'
-export const CAMERA_PADDING = 1.05
+export const CAMERA_PADDING = 0.96
 /** The authored GLB already has left deck at -X and front controls at -Z. */
 export const CONTROLLER_FRONT_AXIS = '-z'
 
